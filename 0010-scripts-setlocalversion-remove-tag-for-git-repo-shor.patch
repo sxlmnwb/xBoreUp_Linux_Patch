@@ -1,0 +1,113 @@
+From c8614dbdeecda91a1126e9b1d5641252746f7ad6 Mon Sep 17 00:00:00 2001
+From: Salman Wahib <sxlmnwb.dev@gmail.com>
+Date: Fri, 24 Apr 2026 01:26:17 +0700
+Subject: [PATCH 10/11] scripts/setlocalversion: remove '+' tag for git repo
+ short version x86/build: Prevent generating avx2 floating-point code
+ mm/vmscan: Reduce amount of swapping cpufreq: tunes ondemand and conservative
+ governor for performance
+
+Co-authored-by: Alexandre Frade <kernel@xanmod.org>
+Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
+---
+ arch/x86/Makefile                      | 2 +-
+ drivers/cpufreq/cpufreq_conservative.c | 8 ++++----
+ drivers/cpufreq/cpufreq_ondemand.c     | 8 ++++----
+ mm/vmscan.c                            | 2 +-
+ scripts/setlocalversion                | 1 -
+ 5 files changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/arch/x86/Makefile b/arch/x86/Makefile
+index 5f881460a8b5..343775ea4d07 100644
+--- a/arch/x86/Makefile
++++ b/arch/x86/Makefile
+@@ -77,7 +77,7 @@ export BITS
+ #
+ #    https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53383
+ #
+-KBUILD_CFLAGS += -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -mno-sse4a
++KBUILD_CFLAGS += -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -mno-avx2 -mno-sse4a
+ KBUILD_RUSTFLAGS += --target=$(objtree)/scripts/target.json
+ KBUILD_RUSTFLAGS += -Ctarget-feature=-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2
+ 
+diff --git a/drivers/cpufreq/cpufreq_conservative.c b/drivers/cpufreq/cpufreq_conservative.c
+index df01d33993d8..de4f660bf159 100644
+--- a/drivers/cpufreq/cpufreq_conservative.c
++++ b/drivers/cpufreq/cpufreq_conservative.c
+@@ -28,8 +28,8 @@ struct cs_dbs_tuners {
+ };
+ 
+ /* Conservative governor macros */
+-#define DEF_FREQUENCY_UP_THRESHOLD		(80)
+-#define DEF_FREQUENCY_DOWN_THRESHOLD		(20)
++#define DEF_FREQUENCY_UP_THRESHOLD		(63)
++#define DEF_FREQUENCY_DOWN_THRESHOLD		(26)
+ #define DEF_FREQUENCY_STEP			(5)
+ #define DEF_SAMPLING_DOWN_FACTOR		(1)
+ #define MAX_SAMPLING_DOWN_FACTOR		(10)
+@@ -47,9 +47,9 @@ static inline unsigned int get_freq_step(struct cs_dbs_tuners *cs_tuners,
+ }
+ 
+ /*
+- * Every sampling_rate, we check, if current idle time is less than 20%
++ * Every sampling_rate, we check, if current idle time is less than 37%
+  * (default), then we try to increase frequency. Every sampling_rate *
+- * sampling_down_factor, we check, if current idle time is more than 80%
++ * sampling_down_factor, we check, if current idle time is more than 74%
+  * (default), then we try to decrease frequency
+  *
+  * Frequency updates happen at minimum steps of 5% (default) of maximum
+diff --git a/drivers/cpufreq/cpufreq_ondemand.c b/drivers/cpufreq/cpufreq_ondemand.c
+index 9942dbb38dae..599f2ae079e8 100644
+--- a/drivers/cpufreq/cpufreq_ondemand.c
++++ b/drivers/cpufreq/cpufreq_ondemand.c
+@@ -18,10 +18,10 @@
+ #include "cpufreq_ondemand.h"
+ 
+ /* On-demand governor macros */
+-#define DEF_FREQUENCY_UP_THRESHOLD		(80)
+-#define DEF_SAMPLING_DOWN_FACTOR		(1)
++#define DEF_FREQUENCY_UP_THRESHOLD		(63)
++#define DEF_SAMPLING_DOWN_FACTOR		(100)
+ #define MAX_SAMPLING_DOWN_FACTOR		(100000)
+-#define MICRO_FREQUENCY_UP_THRESHOLD		(95)
++#define MICRO_FREQUENCY_UP_THRESHOLD		(70)
+ #define MIN_FREQUENCY_UP_THRESHOLD		(1)
+ #define MAX_FREQUENCY_UP_THRESHOLD		(100)
+ 
+@@ -106,7 +106,7 @@ static void dbs_freq_increase(struct cpufreq_policy *policy, unsigned int freq)
+ }
+ 
+ /*
+- * Every sampling_rate, we check, if current idle time is less than 20%
++ * Every sampling_rate, we check, if current idle time is less than 37%
+  * (default), then we try to increase frequency. Else, we adjust the frequency
+  * proportional to load.
+  */
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 5f5debafef01..1b6ad26e7ec9 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -216,7 +216,7 @@ static u64 workingset_protection_prev_totalram __read_mostly = 0;
+ /*
+  * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
+  */
+-int vm_swappiness = 60;
++int vm_swappiness = 10;
+ 
+ #ifdef CONFIG_MEMCG
+ 
+diff --git a/scripts/setlocalversion b/scripts/setlocalversion
+index 28169d7e143b..6ce26e12342f 100755
+--- a/scripts/setlocalversion
++++ b/scripts/setlocalversion
+@@ -117,7 +117,6 @@ scm_version()
+ 		# If only the short version is requested, don't bother
+ 		# running further git commands
+ 		if $short; then
+-			echo "+"
+ 			return
+ 		fi
+ 
+-- 
+2.54.0
+
