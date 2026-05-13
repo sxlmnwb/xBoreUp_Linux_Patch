@@ -1,7 +1,7 @@
-From 54b52445184ff6cbf61efdbc948b2b70f9b569ec Mon Sep 17 00:00:00 2001
+From e43922898b8f8b3ea37a691a6d6659c94df88f75 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 19:44:11 +0700
-Subject: [PATCH 09/11] cpufreq: add Reflex Governor v0.3.0r2 Interactive +
+Subject: [PATCH 07/10] cpufreq: add Reflex Governor v0.3.0r2 Interactive +
  schedutil hybrid CPUFreq governor. Combines instant high-speed frequency
  jumps on idle-to-busy transitions with PELT-proportional scaling for
  sustained workloads, blended via 32ms half-life exponential decay algorithm.

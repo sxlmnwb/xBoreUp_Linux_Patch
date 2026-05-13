@@ -1,7 +1,7 @@
-From 3771e7a4763473af43ba8659d31f06c58045a630 Mon Sep 17 00:00:00 2001
+From e7869e64161a10ecaed0c79edbfafcd0f15a886e Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Sun, 26 Apr 2026 12:22:55 +0700
-Subject: [PATCH 11/11] kbuild: add full support for the mold linker
+Subject: [PATCH 09/10] kbuild: add full support for the mold linker
 
 Support for the mold linker is currently missing from the Kbuild
 infrastructure. This prevents mold from being correctly identified

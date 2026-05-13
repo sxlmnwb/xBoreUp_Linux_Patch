@@ -1,7 +1,7 @@
-From c8614dbdeecda91a1126e9b1d5641252746f7ad6 Mon Sep 17 00:00:00 2001
+From 230da2786bfa536146853cbc4dbaf8449962fc55 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 24 Apr 2026 01:26:17 +0700
-Subject: [PATCH 10/11] scripts/setlocalversion: remove '+' tag for git repo
+Subject: [PATCH 08/10] scripts/setlocalversion: remove '+' tag for git repo
  short version x86/build: Prevent generating avx2 floating-point code
  mm/vmscan: Reduce amount of swapping cpufreq: tunes ondemand and conservative
  governor for performance
@@ -84,10 +84,10 @@ index 9942dbb38dae..599f2ae079e8 100644
   * proportional to load.
   */
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index 5f5debafef01..1b6ad26e7ec9 100644
+index 0fc9373e8251..28af5590e570 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
-@@ -216,7 +216,7 @@ static u64 workingset_protection_prev_totalram __read_mostly = 0;
+@@ -198,7 +198,7 @@ struct scan_control {
  /*
   * From 0 .. MAX_SWAPPINESS.  Higher means more swappy.
   */
