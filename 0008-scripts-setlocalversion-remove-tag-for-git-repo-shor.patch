@@ -1,7 +1,7 @@
-From 230da2786bfa536146853cbc4dbaf8449962fc55 Mon Sep 17 00:00:00 2001
+From 7f7cdc712b5d832c9006e534621f4e716346934b Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 24 Apr 2026 01:26:17 +0700
-Subject: [PATCH 08/10] scripts/setlocalversion: remove '+' tag for git repo
+Subject: [PATCH 08/11] scripts/setlocalversion: remove '+' tag for git repo
  short version x86/build: Prevent generating avx2 floating-point code
  mm/vmscan: Reduce amount of swapping cpufreq: tunes ondemand and conservative
  governor for performance

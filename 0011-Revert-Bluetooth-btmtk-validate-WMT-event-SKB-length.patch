@@ -1,0 +1,67 @@
+From 060b469806c87842cdb66c95cccf83a2716ee779 Mon Sep 17 00:00:00 2001
+From: Salman Wahib <sxlmnwb.dev@gmail.com>
+Date: Fri, 15 May 2026 19:42:44 +0700
+Subject: [PATCH 11/11] Revert "Bluetooth: btmtk: validate WMT event SKB length
+ before struct access"
+
+This reverts commit 70d37a8b9229e394cc17ddad47e90b81d80fcd09.
+
+The original commit introduced strict bounds checking using skb_pull_data()
+to prevent out-of-bounds reads during WMT event parsing. However, this
+causes a fatal initialization regression on certain MediaTek/Foxconn MT7922
+Bluetooth controllers (USB ID 0489:e0f6), specifically observed with
+firmware build 20260224103448.
+
+On these devices, the hardware legitimately responds to BTMTK_WMT_FUNC_CTRL
+with a WMT event payload that is shorter than the expected struct size.
+Consequently, the new skb_pull_data() validation fails and returns -EINVAL,
+completely breaking the device initialization with the following kernel logs:
+
+  Bluetooth: hci0: Failed to send wmt func ctrl (-22)
+  Bluetooth: hci0: HCI Enhanced Setup Synchronous Connection command is advertised, but not supported.
+
+Reverting this commit restores the previous pointer casting behavior,
+bypassing the strict length check, and allowing the controller to successfully
+initialize and function on affected hardware.
+
+Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
+---
+ drivers/bluetooth/btmtk.c | 15 ++-------------
+ 1 file changed, 2 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/bluetooth/btmtk.c b/drivers/bluetooth/btmtk.c
+index 31ff133b6159..fa7533578f85 100644
+--- a/drivers/bluetooth/btmtk.c
++++ b/drivers/bluetooth/btmtk.c
+@@ -654,13 +654,8 @@ static int btmtk_usb_hci_wmt_sync(struct hci_dev *hdev,
+ 	if (data->evt_skb == NULL)
+ 		goto err_free_wc;
+ 
+-	wmt_evt = skb_pull_data(data->evt_skb, sizeof(*wmt_evt));
+-	if (!wmt_evt) {
+-		bt_dev_err(hdev, "WMT event too short (%u bytes)",
+-			   data->evt_skb->len);
+-		err = -EINVAL;
+-		goto err_free_skb;
+-	}
++	/* Parse and handle the return WMT event */
++	wmt_evt = (struct btmtk_hci_wmt_evt *)data->evt_skb->data;
+ 	if (wmt_evt->whdr.op != hdr->op) {
+ 		bt_dev_err(hdev, "Wrong op received %d expected %d",
+ 			   wmt_evt->whdr.op, hdr->op);
+@@ -676,12 +671,6 @@ static int btmtk_usb_hci_wmt_sync(struct hci_dev *hdev,
+ 			status = BTMTK_WMT_PATCH_DONE;
+ 		break;
+ 	case BTMTK_WMT_FUNC_CTRL:
+-		if (!skb_pull_data(data->evt_skb,
+-				   sizeof(wmt_evt_funcc->status))) {
+-			err = -EINVAL;
+-			goto err_free_skb;
+-		}
+-
+ 		wmt_evt_funcc = (struct btmtk_hci_wmt_evt_funcc *)wmt_evt;
+ 		if (be16_to_cpu(wmt_evt_funcc->status) == 0x404)
+ 			status = BTMTK_WMT_ON_DONE;
+-- 
+2.54.0
+

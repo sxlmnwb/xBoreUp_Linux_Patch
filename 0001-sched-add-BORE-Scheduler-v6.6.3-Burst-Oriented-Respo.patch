@@ -1,7 +1,7 @@
-From f9578b69a89dd19bea92ddb1bcd02baa2d4b4b9b Mon Sep 17 00:00:00 2001
+From 28abcb7c5e56497742a17da19b8ab0d955f8b619 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:21:50 +0700
-Subject: [PATCH 01/10] sched: add BORE Scheduler v6.6.3 Burst-Oriented
+Subject: [PATCH 01/11] sched: add BORE Scheduler v6.6.3 Burst-Oriented
  Response Enhancer (BORE) scheduler improves interactivity by tracking burst
  behavior per-task and adjusting vruntime penalties accordingly.
 
@@ -181,7 +181,7 @@ index ce1435cb08b1..9eee2005e25f 100644
 +	 an unnecessarily large base slice, resulting in high scheduling
 +	 latency and poor system responsiveness.
 diff --git a/kernel/exit.c b/kernel/exit.c
-index ede3117fa7d4..3f3af470d5cb 100644
+index 9852444627a0..f7fb9cb3e591 100644
 --- a/kernel/exit.c
 +++ b/kernel/exit.c
 @@ -147,7 +147,11 @@ static void __unhash_process(struct release_task_post *post, struct task_struct

@@ -1,7 +1,7 @@
-From 6327d0c6e05788d5d925e287c9c314ca0ccdf8fd Mon Sep 17 00:00:00 2001
+From bd176ffa320f23d3a567f21207ff782788edd32b Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:27:28 +0700
-Subject: [PATCH 02/10] sched/fair: add POC Selector v2.6.1 Piece-Of-Cake (POC)
+Subject: [PATCH 02/11] sched/fair: add POC Selector v2.6.1 Piece-Of-Cake (POC)
  O(1) Idle CPU Selector for select_idle_cpu() hot path. Uses per-LLC
  atomic64_t bitmaps with lock-free reads for O(1) idle CPU discovery,
  replacing the default O(n) linear scan.
@@ -109,10 +109,10 @@ index 4cf628106dd0..bca9e7c553b9 100644
  	bool "Kernel->user space relay support (formerly relayfs)"
  	select IRQ_WORK
 diff --git a/kernel/sched/ext.c b/kernel/sched/ext.c
-index 064eaa76be4b..744ad4c3db5b 100644
+index c07996aeb2f4..cde5f261571f 100644
 --- a/kernel/sched/ext.c
 +++ b/kernel/sched/ext.c
-@@ -4499,6 +4499,9 @@ static void scx_disable_workfn(struct kthread_work *work)
+@@ -4504,6 +4504,9 @@ static void scx_disable_workfn(struct kthread_work *work)
  	mutex_unlock(&scx_enable_mutex);
  
  	WARN_ON_ONCE(scx_set_enable_state(SCX_DISABLED) != SCX_DISABLING);
@@ -122,7 +122,7 @@ index 064eaa76be4b..744ad4c3db5b 100644
  done:
  	scx_bypass(false);
  }
-@@ -5283,6 +5286,10 @@ static void scx_enable_workfn(struct kthread_work *work)
+@@ -5288,6 +5291,10 @@ static void scx_enable_workfn(struct kthread_work *work)
  	if (!(ops->flags & SCX_OPS_SWITCH_PARTIAL))
  		static_branch_enable(&__scx_switched_all);
  

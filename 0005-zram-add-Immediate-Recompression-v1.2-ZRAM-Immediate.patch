@@ -1,7 +1,7 @@
-From cd22d74f18b7a293b057303713401055ba1987e7 Mon Sep 17 00:00:00 2001
+From fd631dcf56727fdc8d305e6d72b91ae7b150414f Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:44:43 +0700
-Subject: [PATCH 05/10] zram: add Immediate Recompression v1.2 ZRAM Immediate
+Subject: [PATCH 05/11] zram: add Immediate Recompression v1.2 ZRAM Immediate
  Recompression (ZRAM-IR) enhances ZRAM multi-compressor behavior by trying
  multiple higher-priority compressors sequentially during page write,
  selecting the first that achieves sufficient compression ratio instead of
