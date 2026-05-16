@@ -1,4 +1,4 @@
-From 28abcb7c5e56497742a17da19b8ab0d955f8b619 Mon Sep 17 00:00:00 2001
+From 16902a03feb72179ba3cfa46a61a9ea3963779bc Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:21:50 +0700
 Subject: [PATCH 01/11] sched: add BORE Scheduler v6.6.3 Burst-Oriented
@@ -29,7 +29,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  create mode 100644 kernel/sched/bore.c
 
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index 007a0b61856d..b20b45c6e0d5 100644
+index d41e7a8f9c85..967e4883f400 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
 @@ -817,6 +817,37 @@ struct kmap_ctrl {
@@ -181,7 +181,7 @@ index ce1435cb08b1..9eee2005e25f 100644
 +	 an unnecessarily large base slice, resulting in high scheduling
 +	 latency and poor system responsiveness.
 diff --git a/kernel/exit.c b/kernel/exit.c
-index 9852444627a0..f7fb9cb3e591 100644
+index e2b636961254..e073fb0908c2 100644
 --- a/kernel/exit.c
 +++ b/kernel/exit.c
 @@ -147,7 +147,11 @@ static void __unhash_process(struct release_task_post *post, struct task_struct

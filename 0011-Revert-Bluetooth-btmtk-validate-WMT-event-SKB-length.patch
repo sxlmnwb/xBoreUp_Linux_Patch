@@ -1,4 +1,4 @@
-From 060b469806c87842cdb66c95cccf83a2716ee779 Mon Sep 17 00:00:00 2001
+From 02419f272c888e18826f7a9a27a0be8613103185 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 15 May 2026 19:42:44 +0700
 Subject: [PATCH 11/11] Revert "Bluetooth: btmtk: validate WMT event SKB length

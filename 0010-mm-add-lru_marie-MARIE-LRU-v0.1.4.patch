@@ -1,7 +1,7 @@
-From a281e26846547e2d66d338dc565fdcf37377bb26 Mon Sep 17 00:00:00 2001
-From: Salman Wahib <sxlmnwb.dev@gmail.com>
-Date: Wed, 13 May 2026 17:13:49 +0700
-Subject: [PATCH 10/11] mm: add lru_marie MARIE LRU v0.1.2
+From dc3b16f3457acafed42b46a9dc86f0465cb3e28d Mon Sep 17 00:00:00 2001
+From: Masahito S <firelzrd@gmail.com>
+Date: Sat, 16 May 2026 22:15:41 +0900
+Subject: [PATCH 10/11] mm: add lru_marie MARIE LRU v0.1.4
 
 Memory-Aware Reclaim with Intelligent Eviction.
 Replaces le9uo working set protection and kcompressd-unofficial async
@@ -10,7 +10,7 @@ smarter page eviction, async swap compression via kcompmari, and
 hardware-accelerated PTE scanning (SSE2/AVX2/AVX-512/NEON).
 
 Source: https://github.com/firelzrd/lru_marie
-Patch: 0001-linux7.0-lru_marie-0.1.2.patch
+Patch: 0001-linux7.0-lru_marie-0.1.4.patch
 
 Co-authored-by: Masahito S <firelzrd@gmail.com>
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
@@ -29,26 +29,26 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  mm/Makefile                       |   13 +
  mm/huge_memory.c                  |   24 +-
  mm/internal.h                     |  142 ++
- mm/lru_marie.c                    | 2406 +++++++++++++++++++++++++++++
- mm/lru_marie_residency.c          | 1907 +++++++++++++++++++++++
+ mm/lru_marie.c                    | 2462 +++++++++++++++++++++++++++++
+ mm/lru_marie_residency.c          | 1937 +++++++++++++++++++++++
  mm/lru_marie_residency.h          | 1006 ++++++++++++
  mm/lru_marie_simd_arm64.c         |   45 +
  mm/lru_marie_simd_generic.c       |   43 +
  mm/lru_marie_simd_x86.c           |  166 ++
- mm/lru_marie_simd_x86_avx2.S      |  213 +++
- mm/lru_marie_simd_x86_avx512.S    |  198 +++
- mm/lru_marie_simd_x86_sse2.S      |  214 +++
- mm/lru_marie_sort.c               |  259 ++++
- mm/lru_marie_walker.c             |  985 ++++++++++++
+ mm/lru_marie_simd_x86_avx2.S      |  214 +++
+ mm/lru_marie_simd_x86_avx512.S    |  199 +++
+ mm/lru_marie_simd_x86_sse2.S      |  215 +++
+ mm/lru_marie_sort.c               |  259 +++
+ mm/lru_marie_walker.c             |  990 ++++++++++++
  mm/memcontrol.c                   |    2 +
  mm/mm_init.c                      |    6 +-
- mm/page_alloc.c                   |   86 ++
+ mm/page_alloc.c                   |   86 +
  mm/page_io.c                      |  164 ++
  mm/rmap.c                         |    4 +
  mm/swap.c                         |   29 +-
  mm/swap.h                         |    4 +
- mm/vmscan.c                       |  262 ++--
- 33 files changed, 8695 insertions(+), 139 deletions(-)
+ mm/vmscan.c                       |  262 +--
+ 33 files changed, 8789 insertions(+), 139 deletions(-)
  create mode 100644 include/linux/lru_marie.h
  create mode 100644 include/linux/lru_marie_simd.h
  create mode 100644 lib/tests/.kunitconfig
@@ -66,7 +66,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
 
 diff --git a/include/linux/lru_marie.h b/include/linux/lru_marie.h
 new file mode 100644
-index 000000000000..49bc6d72d748
+index 000000000000..866d269ed732
 --- /dev/null
 +++ b/include/linux/lru_marie.h
 @@ -0,0 +1,355 @@
@@ -101,7 +101,7 @@ index 000000000000..49bc6d72d748
 +#define MARIE_PROGNAME	"Marie LRU"
 +#define MARIE_AUTHOR	"Masahito Suzuki"
 +
-+#define MARIE_VERSION	"0.1.2"
++#define MARIE_VERSION	"0.1.4"
 +
 +struct folio;
 +struct lruvec;
@@ -1134,10 +1134,10 @@ index e1e64b875885..b13be681075c 100644
  /*
 diff --git a/mm/lru_marie.c b/mm/lru_marie.c
 new file mode 100644
-index 000000000000..95b273354c08
+index 000000000000..1ba435e50625
 --- /dev/null
 +++ b/mm/lru_marie.c
-@@ -0,0 +1,2406 @@
+@@ -0,0 +1,2462 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * mm/lru_marie.c — Marie LRU.
@@ -1668,13 +1668,37 @@ index 000000000000..95b273354c08
 +	sl = xa_load(&marie_lruvec_xa, (unsigned long)lv);
 +	if (!sl) {
 +		/*
-+		 * @lv has no sl: Marie is gated off mid-flight (marie_disable
-+		 * cleared all sls), or marie_alloc_lruvec(lv, GFP_ATOMIC) just
-+		 * failed. The folio still carries TRACKED bits from a prior
-+		 * sl that no longer exists. Clearing the residency bits and
-+		 * returning true is safe — no live gen list references
-+		 * @folio anywhere (post lru_reparent_memcg / marie_drop_lruvec).
++		 * @lv has no sl but @folio still carries MARIE_TRACKED.
++		 * In normal operation this is reachable only with the folio
++		 * in PENDING_ADD-like state (TRACKED=1, list_empty=true):
++		 *
++		 *   - marie_residency_reparent_locked's we_own=false branch:
++		 *     list_del_init'd off child_sl, TRACKED left set so the
++		 *     concurrent winner's del routes through Marie.  If
++		 *     parent_sl was NULL at reparent time, the folio's
++		 *     current lruvec resolves to parent_lv whose xa_load
++		 *     here returns NULL.
++		 *   - marie_gen_destroy's we_own=false branch during sl
++		 *     teardown: same pattern, list_del_init done.
++		 *
++		 * RESIDENT (TRACKED=1, !list_empty) with sl=NULL is NOT
++		 * reachable: marie_drop_lruvec runs marie_drain_one_lruvec
++		 * (which clears TRACKED for every still-listed folio) and
++		 * xa_erase under the SAME lru_lock the dispatcher holds,
++		 * so by the time xa_load returns NULL no folio with
++		 * TRACKED=1 remains linked into any of @sl's gen lists.
++		 *
++		 * Note: alloc-failure at add time (marie_alloc_lruvec
++		 * returning NULL) is NOT a path that reaches here — that
++		 * path makes lru_marie_add_folio return false and the folio
++		 * goes onto the legacy LRU with TRACKED=0, so the earlier
++		 * folio_marie_test_tracked check short-circuits before this.
++		 *
++		 * Clearing MARIE_STATE_MASK and returning true is safe
++		 * because folio->lru is a self-loop; no live gen list
++		 * neighbour points at @folio.
 +		 */
++		VM_WARN_ON_ONCE_FOLIO(!list_empty(&folio->lru), folio);
 +		set_mask_bits(&folio->flags.f, MARIE_STATE_MASK, 0);
 +		if (folio_test_active(folio))
 +			folio_clear_active(folio);
@@ -2392,11 +2416,15 @@ index 000000000000..95b273354c08
 +	/*
 +	 * Lock order: lru_lock outer, sl->lock inner.
 +	 *
-+	 * Every Marie path that ends up calling marie_update_lru_size has
-+	 * to do so under lru_lock so that the embedded
-+	 * mem_cgroup_update_lru_size update on mz->lru_zone_size is
-+	 * serialised against the legacy/MGLRU updaters. The dispatcher
-+	 * entries (lru_marie_add_folio, lru_marie_del_folio,
++	 * Every Marie path that ends up calling marie_update_lru_size
++	 * has to do so under lru_lock so that its mod_lruvec_state and
++	 * __mod_zone_page_state writes against NR_LRU_BASE+lru /
++	 * NR_ZONE_LRU_BASE+lru are serialised against concurrent
++	 * legacy/MGLRU updaters of the same lruvec (these counters are
++	 * documented as lru_lock-protected).  mz->lru_zone_size is
++	 * intentionally NOT touched by Marie — it is owned by
++	 * legacy add/del paths only (see lru_marie_residency.h).  The
++	 * dispatcher entries (lru_marie_add_folio, lru_marie_del_folio,
 +	 * lru_marie_reparent_lruvec) are already invoked under their
 +	 * caller's lru_lock; this internal entry takes lru_lock itself
 +	 * and pins the same outer-then-inner order so concurrent
@@ -2541,22 +2569,31 @@ index 000000000000..95b273354c08
 +		 * folio_test_clear_lru lost the race: a concurrent path
 +		 * (__page_cache_release after folio_put hits zero,
 +		 * compaction's isolate_migratepages_block, kcompactd's
-+		 * isolate_lru_folio) is doing the del. Try to win
-+		 * folio_test_clear_lru ourselves; if we do, run the full
-+		 * transit (which decrements mz->lru_zone_size). If we
-+		 * lose, leave the folio's Marie state intact -- the
-+		 * concurrent winner's lruvec_del_folio will reach
-+		 * lru_marie_del_folio's slow path under sl->lock once we
-+		 * release and run the RESIDENT->NONE transit there
-+		 * (single decrement). list_empty here also guards against
-+		 * a path that already removed @folio from its gen list.
++		 * isolate_lru_folio) is doing the del.  Leave the folio's
++		 * Marie state strictly intact: TRACKED stays 1, the folio
++		 * stays linked on its gen list, and PG_lru is untouched.
++		 *
++		 * Why we MUST NOT clear MARIE_TRACKED here, even if we win
++		 * folio_test_clear_lru: marie_update_lru_size (the side
++		 * effect of marie_transit RESIDENT->NONE) is decoupled from
++		 * mz->lru_zone_size by design (see lru_marie_residency.h —
++		 * mz is owned by legacy add/del paths only, Marie never
++		 * +1's it).  If we clear MARIE_TRACKED, the concurrent
++		 * winner's lruvec_del_folio reaches lru_marie_del_folio,
++		 * sees TRACKED=0, returns false, and the dispatcher falls
++		 * through to legacy update_lru_size — which DOES decrement
++		 * mz->lru_zone_size, an LRU index Marie's install never
++		 * +1'd.  That trips the mz->lru_zone_size underflow WARN
++		 * at mm/memcontrol.c "lru_size went negative".
++		 *
++		 * Doing nothing is correct: the concurrent winner takes
++		 * sl->lock after we release, walks marie_residency_of() =
++		 * RESIDENT, dispatches to __marie_transit_resident_to_none,
++		 * which list_del_init's the folio, decrements Marie's
++		 * per-bucket / vmstat / marie_nr_folios counters, clears
++		 * PG_lru, and clears MARIE_TRACKED — exactly once, under
++		 * sl->lock, with no legacy fall-through.
 +		 */
-+		if (folio_marie_test_tracked(folio) && !list_empty(&folio->lru) &&
-+		    folio_test_clear_lru(folio)) {
-+			marie_transit(sl, folio, MARIE_R_RESIDENT,
-+				    MARIE_R_NONE, &ctx);
-+			atomic_long_dec(&marie_nr_folios);
-+		}
 +	}
 +
 +	if (g)
@@ -2682,18 +2719,32 @@ index 000000000000..95b273354c08
 +	struct pglist_data *pgdat = lruvec_pgdat(sl->lruvec);
 +	unsigned long nr_taken, nr_scanned = 0;
 +	unsigned int walker_visits = 0;
-+	int off;
++	enum vm_event_item item;
 +
 +	nr_taken = marie_isolate_folios(sl, type, nr_to_scan, &b->folios,
 +				      sc, &nr_scanned, &walker_visits);
 +	if (!nr_taken)
 +		return 0;
 +
-+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + type, nr_taken);
++	/*
++	 * Marie releases lru_lock at the end of marie_isolate_folios, so
++	 * we are back in preemptible context here. The legacy
++	 * shrink_inactive_list keeps lru_lock held across this update and
++	 * can use the per-cpu-unsafe __mod_node_page_state / __count_*;
++	 * we cannot. Use the preempt-safe variants instead.
++	 *
++	 * PGSCAN_* are vm_event_item, NOT node_stat_item — they must be
++	 * routed through count_vm_events / count_memcg_events. Passing
++	 * them to mod_lruvec_state aliases into node_stat_item space and
++	 * trips __mod_memcg_lruvec_state's "missing stat item" WARN.
++	 */
++	mod_node_page_state(pgdat, NR_ISOLATED_ANON + type, nr_taken);
 +
-+	off = vmscan_reclaimer_offset(sc);
-+	mod_lruvec_state(sl->lruvec, PGSCAN_KSWAPD + off, nr_scanned);
-+	mod_lruvec_state(sl->lruvec, PGSCAN_ANON + type, nr_scanned);
++	item = PGSCAN_KSWAPD + vmscan_reclaimer_offset(sc);
++	if (!sc->target_mem_cgroup)
++		count_vm_events(item, nr_scanned);
++	count_memcg_events(lruvec_memcg(sl->lruvec), item, nr_scanned);
++	count_vm_events(PGSCAN_ANON + type, nr_scanned);
 +
 +	b->nr_taken += nr_taken;
 +	b->nr_scanned += nr_scanned;
@@ -2740,7 +2791,7 @@ index 000000000000..95b273354c08
 +	unsigned long nr_reclaimed;
 +	unsigned long nr_taken = b->nr_taken;
 +	unsigned long nr_scanned = b->nr_scanned;
-+	int off;
++	enum vm_event_item item;
 +
 +	if (!nr_taken)
 +		return 0;
@@ -2756,11 +2807,16 @@ index 000000000000..95b273354c08
 +					 b->walker_min >= 1,
 +					 sl->memcg);
 +
-+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + type, -(long)nr_taken);
++	/* See marie_isolate_into_batch: preempt-safe variants required, and
++	 * PGSTEAL_* are vm_event_item (not node_stat_item) — they must be
++	 * routed through count_vm_events / count_memcg_events. */
++	mod_node_page_state(pgdat, NR_ISOLATED_ANON + type, -(long)nr_taken);
 +
-+	off = vmscan_reclaimer_offset(sc);
-+	mod_lruvec_state(sl->lruvec, PGSTEAL_KSWAPD + off, nr_reclaimed);
-+	mod_lruvec_state(sl->lruvec, PGSTEAL_ANON + type, nr_reclaimed);
++	item = PGSTEAL_KSWAPD + vmscan_reclaimer_offset(sc);
++	if (!sc->target_mem_cgroup)
++		count_vm_events(item, nr_reclaimed);
++	count_memcg_events(lruvec_memcg(sl->lruvec), item, nr_reclaimed);
++	count_vm_events(PGSTEAL_ANON + type, nr_reclaimed);
 +
 +	sc->nr_reclaimed += nr_reclaimed;
 +	sc->nr_scanned += nr_scanned;
@@ -3546,10 +3602,10 @@ index 000000000000..95b273354c08
 +subsys_initcall(marie_init);
 diff --git a/mm/lru_marie_residency.c b/mm/lru_marie_residency.c
 new file mode 100644
-index 000000000000..ffa435e386bb
+index 000000000000..1a7fc9cc4a8a
 --- /dev/null
 +++ b/mm/lru_marie_residency.c
-@@ -0,0 +1,1907 @@
+@@ -0,0 +1,1937 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * mm/lru_marie_residency.c — Marie residency ADT implementation.
@@ -4154,7 +4210,34 @@ index 000000000000..ffa435e386bb
 +	if (folio_test_active(folio))
 +		folio_clear_active(folio);
 +
-+	marie_update_lru_size(sl->lruvec, folio_lru_list(folio), zone, -nr);
++	{
++		enum lru_list del_lru = folio_lru_list(folio);
++
++		/*
++		 * Symmetric inverse of __marie_install_locked's accounting
++		 * pair: install +nr's BOTH marie_update_lru_size (vmstat
++		 * NR_LRU_BASE+lru / NR_ZONE_LRU_BASE+lru) AND Marie's own
++		 * per-bucket counter marie_lru_zone_size[lru][zone].  The
++		 * earlier revision decremented only marie_update_lru_size
++		 * here, leaving marie_lru_zone_size monotonically inflated
++		 * by +nr per install — visible as ever-growing
++		 * lruvec_lru_size() readings (mm/vmscan.c sums
++		 * mz->lru_zone_size + lru_marie_zone_size), which skewed
++		 * reclaim pressure heuristics toward over-scanning.
++		 *
++		 * Decrementing at the same lru index install +1'd is the
++		 * critical invariant: install computes inst_lru AFTER
++		 * clear_active so install always credits INACTIVE_*; del
++		 * mirrors that order (clear_active above, then folio_lru_list)
++		 * so del_lru matches inst_lru for the common case.  The
++		 * PG_swapbacked / PG_unevictable asymmetry windows are
++		 * unchanged by this fix — those bucket-mismatch leaks live
++		 * on legacy/vmstat accounting and are orthogonal to Marie's
++		 * own per-bucket counter.
++		 */
++		marie_update_lru_size(sl->lruvec, del_lru, zone, -nr);
++		atomic_long_sub(nr, &sl->marie_lru_zone_size[del_lru][zone]);
++	}
 +
 +	/*
 +	 * Symmetric inverse of __marie_install_locked's "TRACKED then
@@ -4673,10 +4756,13 @@ index 000000000000..ffa435e386bb
 +void marie_drain_pending(struct marie_lruvec *sl)
 +{
 +	/*
-+	 * Lock order: lru_lock outer, sl->lock inner. The drain transit
-+	 * paths call marie_update_lru_size which embeds
-+	 * mem_cgroup_update_lru_size — that update on mz->lru_zone_size
-+	 * needs lru_lock to serialise against legacy / MGLRU updaters.
++	 * Lock order: lru_lock outer, sl->lock inner.  The drain transit
++	 * paths call marie_update_lru_size, whose mod_lruvec_state and
++	 * __mod_zone_page_state writes against NR_LRU_BASE+lru /
++	 * NR_ZONE_LRU_BASE+lru are documented as lru_lock-protected
++	 * against concurrent legacy/MGLRU updaters of the same lruvec.
++	 * mz->lru_zone_size is intentionally NOT touched by Marie (see
++	 * lru_marie_residency.h's marie_update_lru_size comment).
 +	 */
 +	/*
 +	 * Pin the CPU across the accumulate-then-drain span. The drain
@@ -6743,10 +6829,10 @@ index 000000000000..b7a3c55e7758
 +EXPORT_SYMBOL_GPL(lru_marie_simd_young_pte_mask);
 diff --git a/mm/lru_marie_simd_x86_avx2.S b/mm/lru_marie_simd_x86_avx2.S
 new file mode 100644
-index 000000000000..3f5b2994b572
+index 000000000000..f317e38703d2
 --- /dev/null
 +++ b/mm/lru_marie_simd_x86_avx2.S
-@@ -0,0 +1,213 @@
+@@ -0,0 +1,214 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * mm/marie_simd_x86_avx2.S -- AVX2 PTE young-bit scan for Marie walker.
@@ -6809,6 +6895,7 @@ index 000000000000..3f5b2994b572
 + */
 +
 +#include <linux/linkage.h>
++#include <linux/cfi_types.h>
 +
 +	/* -------------------------------------------------------------- */
 +	/* Read-only data: young-bit mask broadcast                        */
@@ -6833,7 +6920,7 @@ index 000000000000..3f5b2994b572
 + * pte_table: rdi -- 512 PTEs (4096 bytes), page-table base (8-byte aligned)
 + * bitmap:    rsi -- 8 ulongs (64 bytes), caller pre-cleared
 + */
-+SYM_FUNC_START(lru_marie_simd_scan_avx2)
++SYM_TYPED_FUNC_START(lru_marie_simd_scan_avx2)
 +
 +	/* Load young-bit mask once; ymm0 is constant for the whole call. */
 +	vmovdqa	marie_avx2_young_mask(%rip), %ymm0
@@ -6962,10 +7049,10 @@ index 000000000000..3f5b2994b572
 +SYM_FUNC_END(lru_marie_simd_scan_avx2)
 diff --git a/mm/lru_marie_simd_x86_avx512.S b/mm/lru_marie_simd_x86_avx512.S
 new file mode 100644
-index 000000000000..63b5ba68ad63
+index 000000000000..ec19ccfdbb64
 --- /dev/null
 +++ b/mm/lru_marie_simd_x86_avx512.S
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,199 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * mm/marie_simd_x86_avx512.S -- AVX-512F PTE young-bit scan for Marie walker.
@@ -7030,6 +7117,7 @@ index 000000000000..63b5ba68ad63
 + */
 +
 +#include <linux/linkage.h>
++#include <linux/cfi_types.h>
 +
 +	/* -------------------------------------------------------------- */
 +	/* Read-only data: young-bit mask broadcast                        */
@@ -7060,7 +7148,7 @@ index 000000000000..63b5ba68ad63
 + *                   stricter SIMD alignment is required for the input
 + * bitmap:    rsi -- 8 ulongs (64 bytes), caller pre-cleared
 + */
-+SYM_FUNC_START(lru_marie_simd_scan_avx512)
++SYM_TYPED_FUNC_START(lru_marie_simd_scan_avx512)
 +
 +	/* Load young-bit mask once; zmm0 is constant for the whole call. */
 +	vmovdqa64	marie_avx512_young_mask(%rip), %zmm0
@@ -7166,10 +7254,10 @@ index 000000000000..63b5ba68ad63
 +SYM_FUNC_END(lru_marie_simd_scan_avx512)
 diff --git a/mm/lru_marie_simd_x86_sse2.S b/mm/lru_marie_simd_x86_sse2.S
 new file mode 100644
-index 000000000000..003029d1d214
+index 000000000000..09852b3c76f7
 --- /dev/null
 +++ b/mm/lru_marie_simd_x86_sse2.S
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,215 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * mm/marie_simd_x86_sse2.S -- SSE2 PTE young-bit scan for the Marie walker.
@@ -7222,6 +7310,7 @@ index 000000000000..003029d1d214
 + */
 +
 +#include <linux/linkage.h>
++#include <linux/cfi_types.h>
 +
 +	/* -------------------------------------------------------------- */
 +	/* Read-only data: young-bit mask broadcast                        */
@@ -7246,7 +7335,7 @@ index 000000000000..003029d1d214
 + * pte_table: rdi -- 512 PTEs (4096 bytes), page-table base (8-byte aligned)
 + * bitmap:    rsi -- 8 ulongs (64 bytes), caller pre-cleared
 + */
-+SYM_FUNC_START(lru_marie_simd_scan_sse2)
++SYM_TYPED_FUNC_START(lru_marie_simd_scan_sse2)
 +
 +	/* Load young-bit mask once; xmm0 is constant for the whole call. */
 +	movdqa	marie_sse2_young_mask(%rip), %xmm0
@@ -7651,10 +7740,10 @@ index 000000000000..571e2c8deeb2
 +}
 diff --git a/mm/lru_marie_walker.c b/mm/lru_marie_walker.c
 new file mode 100644
-index 000000000000..7b8b6aefab79
+index 000000000000..2ebfbc5b8da0
 --- /dev/null
 +++ b/mm/lru_marie_walker.c
-@@ -0,0 +1,985 @@
+@@ -0,0 +1,990 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * mm/lru_marie_walker.c — Marie's SIMD-accelerated PTE walker.
@@ -8566,8 +8655,13 @@ index 000000000000..7b8b6aefab79
 +			/*
 +			 * Lock order: lru_lock outer, per-type lock inner —
 +			 * the promote_queue drain's transit can call into
-+			 * marie_update_lru_size which embeds
-+			 * mem_cgroup_update_lru_size on mz->lru_zone_size.
++			 * marie_update_lru_size, whose mod_lruvec_state and
++			 * __mod_zone_page_state writes against
++			 * NR_LRU_BASE+lru / NR_ZONE_LRU_BASE+lru are
++			 * documented as lru_lock-protected against concurrent
++			 * legacy/MGLRU updaters of the same lruvec.
++			 * mz->lru_zone_size is intentionally NOT touched by
++			 * Marie (see lru_marie_residency.h).
 +			 */
 +			scoped_guard(spinlock_irq, &sl->lruvec->lru_lock)
 +			scoped_guard(marie_type_sl, &sl->types[t]) {

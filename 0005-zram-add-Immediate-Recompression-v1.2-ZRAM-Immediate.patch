@@ -1,4 +1,4 @@
-From fd631dcf56727fdc8d305e6d72b91ae7b150414f Mon Sep 17 00:00:00 2001
+From f61970b1c53fb834ff63c666bdebc59b630c30c2 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:44:43 +0700
 Subject: [PATCH 05/11] zram: add Immediate Recompression v1.2 ZRAM Immediate
