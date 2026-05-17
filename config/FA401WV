@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 7.0.8 Kernel Configuration
+# Linux/x86 7.0.9 Kernel Configuration
 #
 CONFIG_CC_VERSION_TEXT="xBoreUp with [lto-thin,znver5,03,mold] feat AOCC v5.1.0 (https://www.amd.com/en/developer/aocc.html) clang version 22.1.6 (https://github.com/llvm/llvm-project.git c0262e742787e5997a6df2b4b56830df00a6ff11)"
 CONFIG_GCC_VERSION=0

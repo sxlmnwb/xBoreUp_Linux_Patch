@@ -1,4 +1,4 @@
-From 16902a03feb72179ba3cfa46a61a9ea3963779bc Mon Sep 17 00:00:00 2001
+From 7c24c697c8ca579046e59cffb5ede30a11335211 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:21:50 +0700
 Subject: [PATCH 01/11] sched: add BORE Scheduler v6.6.3 Burst-Oriented

@@ -1,7 +1,7 @@
-From dc3b16f3457acafed42b46a9dc86f0465cb3e28d Mon Sep 17 00:00:00 2001
+From 9ea3c631a70b9afe41463e08f36e91e1bcf3f34a Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Sat, 16 May 2026 22:15:41 +0900
-Subject: [PATCH 10/11] mm: add lru_marie MARIE LRU v0.1.4
+Date: Sun, 17 May 2026 12:01:28 +0900
+Subject: [PATCH 10/11] mm: add lru_marie MARIE LRU v0.1.5
 
 Memory-Aware Reclaim with Intelligent Eviction.
 Replaces le9uo working set protection and kcompressd-unofficial async
@@ -10,7 +10,7 @@ smarter page eviction, async swap compression via kcompmari, and
 hardware-accelerated PTE scanning (SSE2/AVX2/AVX-512/NEON).
 
 Source: https://github.com/firelzrd/lru_marie
-Patch: 0001-linux7.0-lru_marie-0.1.4.patch
+Patch: 0001-linux7.0-lru_marie-0.1.5.patch
 
 Co-authored-by: Masahito S <firelzrd@gmail.com>
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
@@ -29,9 +29,9 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  mm/Makefile                       |   13 +
  mm/huge_memory.c                  |   24 +-
  mm/internal.h                     |  142 ++
- mm/lru_marie.c                    | 2462 +++++++++++++++++++++++++++++
- mm/lru_marie_residency.c          | 1937 +++++++++++++++++++++++
- mm/lru_marie_residency.h          | 1006 ++++++++++++
+ mm/lru_marie.c                    | 2476 +++++++++++++++++++++++++++++
+ mm/lru_marie_residency.c          | 2180 +++++++++++++++++++++++++
+ mm/lru_marie_residency.h          | 1087 +++++++++++++
  mm/lru_marie_simd_arm64.c         |   45 +
  mm/lru_marie_simd_generic.c       |   43 +
  mm/lru_marie_simd_x86.c           |  166 ++
@@ -48,7 +48,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  mm/swap.c                         |   29 +-
  mm/swap.h                         |    4 +
  mm/vmscan.c                       |  262 +--
- 33 files changed, 8789 insertions(+), 139 deletions(-)
+ 33 files changed, 9127 insertions(+), 139 deletions(-)
  create mode 100644 include/linux/lru_marie.h
  create mode 100644 include/linux/lru_marie_simd.h
  create mode 100644 lib/tests/.kunitconfig
@@ -66,7 +66,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
 
 diff --git a/include/linux/lru_marie.h b/include/linux/lru_marie.h
 new file mode 100644
-index 000000000000..866d269ed732
+index 000000000000..be7a077085f7
 --- /dev/null
 +++ b/include/linux/lru_marie.h
 @@ -0,0 +1,355 @@
@@ -101,7 +101,7 @@ index 000000000000..866d269ed732
 +#define MARIE_PROGNAME	"Marie LRU"
 +#define MARIE_AUTHOR	"Masahito Suzuki"
 +
-+#define MARIE_VERSION	"0.1.4"
++#define MARIE_VERSION	"0.1.5"
 +
 +struct folio;
 +struct lruvec;
@@ -531,7 +531,7 @@ index 000000000000..53d7da695a0d
 +
 +#endif /* _LINUX_LRU_MARIE_SIMD_H */
 diff --git a/include/linux/mm.h b/include/linux/mm.h
-index 0ceba2c86d9c..45b56f4c5715 100644
+index 2d6d268a2798..779d1ce23c9f 100644
 --- a/include/linux/mm.h
 +++ b/include/linux/mm.h
 @@ -15,6 +15,7 @@
@@ -1134,10 +1134,10 @@ index e1e64b875885..b13be681075c 100644
  /*
 diff --git a/mm/lru_marie.c b/mm/lru_marie.c
 new file mode 100644
-index 000000000000..1ba435e50625
+index 000000000000..bdcd08fd2f65
 --- /dev/null
 +++ b/mm/lru_marie.c
-@@ -0,0 +1,2462 @@
+@@ -0,0 +1,2476 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * mm/lru_marie.c — Marie LRU.
@@ -1998,35 +1998,49 @@ index 000000000000..1ba435e50625
 +		 * the per-CPU deferred_put_q; the caller drains the queue
 +		 * via marie_drain_deferred_puts() after spin_unlock_irq. */
 +		{
-+			int tq;
++			int tq, cpu;
 +
 +			for (tq = 0; tq < ANON_AND_FILE; tq++) {
-+				struct llist_node *first, *node, *next;
++				struct marie_type *t = &sl->types[tq];
 +
-+				first = llist_del_all(&sl->types[tq].add_queue);
-+				llist_for_each_safe(node, next, first) {
-+					struct marie_pending *p =
-+						container_of(node, struct marie_pending,
-+							     node);
-+					struct folio *f = p->folio;
-+					enum lru_list lru = folio_lru_list(f);
++				for_each_possible_cpu(cpu) {
++					struct llist_node *first, *node, *next;
 +
-+					set_mask_bits(&f->flags.f, MARIE_STATE_MASK, 0);
-+					folio_set_lru(f);
-+					/*
-+					 * lru_marie_add_folio bails on unevictable, so
-+					 * residue entries are evictable in the
-+					 * post-fix world. Mirror legacy
-+					 * lruvec_add_folio's "skip list_add for
-+					 * LRU_UNEVICTABLE" rule defensively in case
-+					 * any pre-fix wrapper survived.
-+					 */
-+					if (lru != LRU_UNEVICTABLE)
-+						list_add(&f->lru, &lruvec->lists[lru]);
-+					update_lru_size(lruvec, lru, folio_zonenum(f),
++					first = llist_del_all(
++						&t->add_queue[cpu].head);
++					llist_for_each_safe(node, next, first) {
++						struct marie_pending *p =
++							container_of(node,
++								struct marie_pending,
++								node);
++						struct folio *f = p->folio;
++						enum lru_list lru =
++							folio_lru_list(f);
++
++						set_mask_bits(&f->flags.f,
++							      MARIE_STATE_MASK, 0);
++						folio_set_lru(f);
++						/*
++						 * lru_marie_add_folio bails on
++						 * unevictable, so residue
++						 * entries are evictable in the
++						 * post-fix world. Mirror legacy
++						 * lruvec_add_folio's "skip
++						 * list_add for LRU_UNEVICTABLE"
++						 * rule defensively in case any
++						 * pre-fix wrapper survived.
++						 */
++						if (lru != LRU_UNEVICTABLE)
++							list_add(&f->lru,
++								&lruvec->lists[lru]);
++						update_lru_size(lruvec, lru,
++							folio_zonenum(f),
 +							folio_nr_pages(f));
-+					marie_pending_free(p);
-+					marie_defer_folio_put(f);
++						atomic_long_dec(
++							&t->nr_pending_add);
++						marie_pending_free(p);
++						marie_defer_folio_put(f);
++					}
 +				}
 +			}
 +		}
@@ -3602,10 +3616,10 @@ index 000000000000..1ba435e50625
 +subsys_initcall(marie_init);
 diff --git a/mm/lru_marie_residency.c b/mm/lru_marie_residency.c
 new file mode 100644
-index 000000000000..1a7fc9cc4a8a
+index 000000000000..b72c7981ffef
 --- /dev/null
 +++ b/mm/lru_marie_residency.c
-@@ -0,0 +1,1937 @@
+@@ -0,0 +1,2180 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * mm/lru_marie_residency.c — Marie residency ADT implementation.
@@ -4011,8 +4025,19 @@ index 000000000000..1a7fc9cc4a8a
 +		set_mask_bits(&folio->flags.f, MARIE_STATE_MASK, 0);
 +		return false;
 +	}
++	/* Cache folio metadata for the drain — see marie_pending. */
++	p->type = folio_is_file_lru(folio);
++	p->zone = folio_zonenum(folio);
 +	folio_get(folio);
-+	llist_add(&p->node, &sl->types[folio_is_file_lru(folio)].add_queue);
++	/*
++	 * Per-CPU add_queue: caller is inside folio_batch_move_lru with
++	 * lruvec->lru_lock held (IRQ off, preempt off), so smp_processor_id()
++	 * is stable. Targeting THIS CPU's slot keeps the head cacheline
++	 * private to this producer.
++	 */
++	llist_add(&p->node,
++		  &sl->types[p->type].add_queue[smp_processor_id()].head);
++	atomic_long_inc(&sl->types[p->type].nr_pending_add);
 +	marie_pending_inc_and_check(sl);
 +	return true;
 +}
@@ -4292,13 +4317,15 @@ index 000000000000..1a7fc9cc4a8a
 +	 * RESIDENT (PENDING_PROMOTE is queue-side state). A live folio
 +	 * therefore takes the same list-move path as direct
 +	 * RESIDENT -> RESIDENT promote.
++	 *
++	 * ctx->{type,zone} are pre-populated by the drain caller from the
++	 * marie_pending snapshot taken at walker enqueue time; the
++	 * downstream __marie_transit_resident_to_resident does not consume
++	 * ctx->nr, so we skip all three folio->flags re-reads.
 +	 */
 +	if (!folio_marie_test_tracked(folio) || list_empty(&folio->lru))
 +		return false;
 +
-+	ctx->type = folio_is_file_lru(folio);
-+	ctx->zone = folio_zonenum(folio);
-+	ctx->nr   = folio_nr_pages(folio);
 +	return __marie_transit_resident_to_resident(sl, folio, ctx);
 +}
 +
@@ -4330,8 +4357,19 @@ index 000000000000..1a7fc9cc4a8a
 +	p = marie_pending_alloc(folio);
 +	if (!p)
 +		return MARIE_TIER_INC_FAILED;
++	/* Cache folio metadata for the drain — see marie_pending. */
++	p->type = folio_is_file_lru(folio);
++	p->zone = folio_zonenum(folio);
 +	folio_get(folio);
-+	llist_add(&p->node, &sl->types[folio_is_file_lru(folio)].promote_queue);
++	/*
++	 * Per-CPU promote_queue: walker tier_inc runs inside the per-PTE
++	 * loop under pte_offset_map_lock's ptl (preempt off), so
++	 * smp_processor_id() is stable. Targeting THIS CPU's slot keeps
++	 * the head cacheline private to this producer.
++	 */
++	llist_add(&p->node,
++		  &sl->types[p->type].promote_queue[smp_processor_id()].head);
++	atomic_long_inc(&sl->types[p->type].nr_pending_promote);
 +	return MARIE_TIER_INC_SATURATED;
 +}
 +
@@ -4516,76 +4554,104 @@ index 000000000000..1a7fc9cc4a8a
 +void marie_drain_add_queue_one_type_locked(struct marie_lruvec *sl,
 +					   int type)
 +{
-+	struct llist_head *q = &sl->types[type].add_queue;
-+	struct llist_node *first, *node, *next;
-+
-+	if (llist_empty(q))
-+		return;
-+
-+	first = llist_del_all(q);
++	struct marie_type *t = &sl->types[type];
++	int cpu;
 +
 +	/*
-+	 * Per-sl queue: every entry belongs to @sl by construction (the
-+	 * producer enqueued onto sl->types[type].add_queue after
-+	 * marie_get_lruvec resolved the matching sl). No cross-memcg bounce
-+	 * loop is needed.
++	 * O(1) cross-CPU emptiness gate. Without this, a quiet sl would
++	 * pay nr_cpu_ids llist_del_all cacheline fetches on every drain
++	 * entry just to learn there is nothing to do.
 +	 */
-+	llist_for_each_safe(node, next, first) {
-+		struct marie_pending *p =
-+			container_of(node, struct marie_pending, node);
-+		struct folio *folio = p->folio;
-+		struct marie_transit_ctx ctx = { };
++	if (atomic_long_read(&t->nr_pending_add) == 0)
++		return;
 +
-+		if (next) {
-+			struct marie_pending *np =
-+				container_of(next, struct marie_pending, node);
-+			__builtin_prefetch(np->folio, 0, 3);
-+		}
++	/*
++	 * Per-sl, per-CPU queues: each producer enqueued onto its local
++	 * CPU's slot, so every entry on any slot still belongs to @sl by
++	 * construction. We visit each slot, llist_del_all it, and process
++	 * its chain; install failures re-attach to the SAME slot we popped
++	 * from, preserving the producer-CPU locality.
++	 */
++	for_each_possible_cpu(cpu) {
++		struct llist_head *q = &t->add_queue[cpu].head;
++		struct llist_node *first, *node, *next;
 +
-+		/* PENDING_ADD cancellation: lruvec_del_folio cleared TRACKED
-+		 * before our drain reached this entry. */
-+		if (!folio_marie_test_tracked(folio)) {
++		first = llist_del_all(q);
++		if (!first)
++			continue;
++
++		llist_for_each_safe(node, next, first) {
++			struct marie_pending *p =
++				container_of(node, struct marie_pending, node);
++			struct folio *folio = p->folio;
++			struct marie_transit_ctx ctx = { };
++
++			if (next) {
++				struct marie_pending *np =
++					container_of(next,
++						     struct marie_pending,
++						     node);
++				__builtin_prefetch(np->folio, 0, 3);
++			}
++
++			/* PENDING_ADD cancellation: lruvec_del_folio
++			 * cleared TRACKED before our drain reached this
++			 * entry. */
++			if (!folio_marie_test_tracked(folio)) {
++				atomic_long_dec(&t->nr_pending_add);
++				marie_defer_pending_put(p);
++				continue;
++			}
++
++			/*
++			 * Stale-wrapper drop. PENDING_ADD residency requires
++			 * list_empty(&folio->lru). If a prior wrapper for
++			 * this folio has already installed it (via a
++			 * PENDING_ADD -> NONE -> PENDING_ADD round-trip that
++			 * re-armed TRACKED via a fresh CMPXCHG), the folio
++			 * is already RESIDENT on a gen list. Re-installing
++			 * would splice the folio into a second gen list
++			 * head and corrupt both.
++			 */
++			if (!list_empty(&folio->lru)) {
++				atomic_long_dec(&t->nr_pending_add);
++				marie_defer_pending_put(p);
++				continue;
++			}
++
++			/*
++			 * PENDING_ADD -> RESIDENT install. On gen-alloc
++			 * failure (GFP_ATOMIC) __marie_install_locked is a
++			 * true no-op: neither folio->flags nor folio->lru is
++			 * touched, so the folio remains in PENDING_ADD with
++			 * the existing list_head payload invariant intact.
++			 * Re-llist_add the wrapper onto the same per-CPU
++			 * slot so the next drain (watermark-triggered or
++			 * marie_isolate_folios entry) retries the install
++			 * once gen-alloc(GFP_ATOMIC) succeeds (typically
++			 * after the gen-spare pool's workqueue refill).
++			 *
++			 * If install fails persistently AND the gen ring is
++			 * exhausted, marie_residency_isolate_pending_add
++			 * (called from marie_isolate_folios Phase 1b) will
++			 * dequeue the wrapper and route the folio through
++			 * PENDING_ADD -> NONE -> reclaim directly, so no
++			 * folio is ever stranded.
++			 *
++			 * Re-queue path: do NOT dec nr_pending_add — the
++			 * entry was counted on its original enqueue and is
++			 * going back into the same per-CPU slot, so the count
++			 * still reflects reality.
++			 */
++			if (!marie_transit(sl, folio, MARIE_R_PENDING_ADD,
++					 MARIE_R_RESIDENT, &ctx)) {
++				llist_add(&p->node, q);
++				continue;
++			}
++
++			atomic_long_dec(&t->nr_pending_add);
 +			marie_defer_pending_put(p);
-+			continue;
 +		}
-+
-+		/*
-+		 * Stale-wrapper drop. PENDING_ADD residency requires
-+		 * list_empty(&folio->lru). If a prior wrapper for this folio
-+		 * has already installed it (via a PENDING_ADD -> NONE ->
-+		 * PENDING_ADD round-trip that re-armed TRACKED via a fresh
-+		 * CMPXCHG), the folio is already RESIDENT on a gen list. Re-
-+		 * installing would splice the folio into a second gen list
-+		 * head and corrupt both.
-+		 */
-+		if (!list_empty(&folio->lru)) {
-+			marie_defer_pending_put(p);
-+			continue;
-+		}
-+
-+		/*
-+		 * PENDING_ADD -> RESIDENT install. On gen-alloc failure
-+		 * (GFP_ATOMIC) __marie_install_locked is a true no-op:
-+		 * neither folio->flags nor folio->lru is touched, so the folio
-+		 * remains in PENDING_ADD with the existing list_head payload
-+		 * invariant intact. Re-llist_add the wrapper so the next
-+		 * drain (watermark-triggered or marie_isolate_folios entry) retries
-+		 * the install once gen-alloc(GFP_ATOMIC) succeeds (typically
-+		 * after the gen-spare pool's workqueue refill).
-+		 *
-+		 * If install fails persistently AND the gen ring is exhausted,
-+		 * marie_residency_isolate_pending_add (called from
-+		 * marie_isolate_folios Phase 1b) will dequeue the wrapper and
-+		 * route the folio through PENDING_ADD -> NONE -> reclaim
-+		 * directly, so no folio is ever stranded.
-+		 */
-+		if (!marie_transit(sl, folio, MARIE_R_PENDING_ADD,
-+				 MARIE_R_RESIDENT, &ctx)) {
-+			llist_add(&p->node, q);
-+			continue;
-+		}
-+
-+		marie_defer_pending_put(p);
 +	}
 +}
 +
@@ -4633,67 +4699,89 @@ index 000000000000..1a7fc9cc4a8a
 +					     struct list_head *dst,
 +					     int cap_remaining)
 +{
-+	struct llist_head *q = &sl->types[type].add_queue;
-+	struct llist_node *first, *node, *next;
++	struct marie_type *t = &sl->types[type];
 +	unsigned long n_taken = 0;
++	int cpu;
 +
-+	if (cap_remaining <= 0 || llist_empty(q))
++	if (cap_remaining <= 0 ||
++	    atomic_long_read(&t->nr_pending_add) == 0)
 +		return 0;
 +
-+	first = llist_del_all(q);
-+	llist_for_each_safe(node, next, first) {
-+		struct marie_pending *p =
-+			container_of(node, struct marie_pending, node);
-+		struct folio *folio = p->folio;
-+		struct marie_transit_ctx ctx = { };
++	for_each_possible_cpu(cpu) {
++		struct llist_head *q = &t->add_queue[cpu].head;
++		struct llist_node *first, *node, *next;
 +
-+		if (n_taken >= (unsigned long)cap_remaining) {
-+			llist_add(&p->node, q);
++		first = llist_del_all(q);
++		if (!first)
 +			continue;
++
++		llist_for_each_safe(node, next, first) {
++			struct marie_pending *p =
++				container_of(node, struct marie_pending, node);
++			struct folio *folio = p->folio;
++			struct marie_transit_ctx ctx = { };
++
++			/*
++			 * Cap-exhaustion re-queue path: entry stays counted,
++			 * going back into the SAME per-CPU slot we popped
++			 * from. Do NOT dec nr_pending_add.
++			 */
++			if (n_taken >= (unsigned long)cap_remaining) {
++				llist_add(&p->node, q);
++				continue;
++			}
++
++			if (!folio_marie_test_tracked(folio)) {
++				atomic_long_dec(&t->nr_pending_add);
++				marie_defer_pending_put(p);
++				continue;
++			}
++
++			/*
++			 * Stale-wrapper drop (mirrors
++			 * marie_drain_add_queue_locked). If a prior wrapper
++			 * has already installed this folio onto a gen list
++			 * via a PENDING_ADD -> NONE -> PENDING_ADD round-
++			 * trip, the folio is RESIDENT, not PENDING_ADD.
++			 * Running the PENDING_ADD -> NONE transit on a
++			 * RESIDENT folio would INIT_LIST_HEAD over its valid
++			 * gen-list pointers, leaving the gen list's
++			 * neighbors with dangling links into the
++			 * mid-isolation folio.
++			 */
++			if (!list_empty(&folio->lru)) {
++				atomic_long_dec(&t->nr_pending_add);
++				marie_defer_pending_put(p);
++				continue;
++			}
++
++			/*
++			 * Claim PG_lru first to win against concurrent
++			 * isolators (compaction's isolate_lru_folio,
++			 * __page_cache_release). On a lost race the folio
++			 * belongs to the other isolator; we must not also
++			 * claim it. Drop the wrapper's folio_get via
++			 * marie_defer_pending_put.
++			 */
++			if (!folio_test_clear_lru(folio)) {
++				atomic_long_dec(&t->nr_pending_add);
++				marie_defer_pending_put(p);
++				continue;
++			}
++
++			(void)marie_transit(sl, folio, MARIE_R_PENDING_ADD,
++					  MARIE_R_NONE, &ctx);
++
++			list_add(&folio->lru, dst);
++			n_taken++;
++
++			/* Wrapper's folio_get reference is transferred to
++			 * the caller (= shrink_folio_list's isolation
++			 * reference); only the wrapper struct returns to
++			 * the slab pool. */
++			atomic_long_dec(&t->nr_pending_add);
++			marie_pending_free(p);
 +		}
-+
-+		if (!folio_marie_test_tracked(folio)) {
-+			marie_defer_pending_put(p);
-+			continue;
-+		}
-+
-+		/*
-+		 * Stale-wrapper drop (mirrors marie_drain_add_queue_locked).
-+		 * If a prior wrapper has already installed this folio onto a
-+		 * gen list via a PENDING_ADD -> NONE -> PENDING_ADD round-trip,
-+		 * the folio is RESIDENT, not PENDING_ADD. Running the
-+		 * PENDING_ADD -> NONE transit on a RESIDENT folio would
-+		 * INIT_LIST_HEAD over its valid gen-list pointers, leaving
-+		 * the gen list's neighbors with dangling links into the
-+		 * mid-isolation folio.
-+		 */
-+		if (!list_empty(&folio->lru)) {
-+			marie_defer_pending_put(p);
-+			continue;
-+		}
-+
-+		/*
-+		 * Claim PG_lru first to win against concurrent isolators
-+		 * (compaction's isolate_lru_folio, __page_cache_release).
-+		 * On a lost race the folio belongs to the other isolator;
-+		 * we must not also claim it. Drop the wrapper's folio_get
-+		 * via marie_defer_pending_put.
-+		 */
-+		if (!folio_test_clear_lru(folio)) {
-+			marie_defer_pending_put(p);
-+			continue;
-+		}
-+
-+		(void)marie_transit(sl, folio, MARIE_R_PENDING_ADD,
-+				  MARIE_R_NONE, &ctx);
-+
-+		list_add(&folio->lru, dst);
-+		n_taken++;
-+
-+		/* Wrapper's folio_get reference is transferred to the
-+		 * caller (= shrink_folio_list's isolation reference);
-+		 * only the wrapper struct returns to the slab pool. */
-+		marie_pending_free(p);
 +	}
 +
 +	return n_taken;
@@ -4719,29 +4807,54 @@ index 000000000000..1a7fc9cc4a8a
 +void marie_drain_promote_queue_one_type_locked(struct marie_lruvec *sl,
 +					       int type)
 +{
-+	struct llist_head *q = &sl->types[type].promote_queue;
-+	struct llist_node *first, *node, *next;
++	struct marie_type *t = &sl->types[type];
++	int cpu;
 +
-+	if (llist_empty(q))
++	if (atomic_long_read(&t->nr_pending_promote) == 0)
 +		return;
 +
-+	first = llist_del_all(q);
++	for_each_possible_cpu(cpu) {
++		struct llist_head *q = &t->promote_queue[cpu].head;
++		struct llist_node *first, *node, *next;
 +
-+	llist_for_each_safe(node, next, first) {
-+		struct marie_pending *p =
-+			container_of(node, struct marie_pending, node);
-+		struct folio *folio = p->folio;
-+		struct marie_transit_ctx ctx = { };
++		first = llist_del_all(q);
++		if (!first)
++			continue;
 +
-+		/*
-+		 * PENDING_PROMOTE -> RESIDENT: a stale entry (folio
-+		 * removed between walker enqueue and now) becomes a
-+		 * no-op inside __marie_transit_pending_promote_to_resident
-+		 * via its TRACKED + list_empty pre-check.
-+		 */
-+		(void)marie_transit(sl, folio, MARIE_R_PENDING_PROMOTE,
-+				  MARIE_R_RESIDENT, &ctx);
-+		marie_defer_pending_put(p);
++		llist_for_each_safe(node, next, first) {
++			struct marie_pending *p =
++				container_of(node, struct marie_pending, node);
++			struct folio *folio = p->folio;
++			struct marie_transit_ctx ctx = {
++				.type = p->type,
++				.zone = p->zone,
++			};
++
++			if (next) {
++				struct marie_pending *np =
++					container_of(next,
++						     struct marie_pending,
++						     node);
++				__builtin_prefetch(np->folio, 1, 1);
++			}
++
++			/*
++			 * PENDING_PROMOTE -> RESIDENT: a stale entry (folio
++			 * removed between walker enqueue and now) becomes a
++			 * no-op inside
++			 * __marie_transit_pending_promote_to_resident via
++			 * its TRACKED + list_empty pre-check.
++			 *
++			 * ctx is pre-filled from the marie_pending snapshot
++			 * so the transit body skips folio_is_file_lru /
++			 * folio_zonenum reads (the walker already paid for
++			 * that folio touch).
++			 */
++			(void)marie_transit(sl, folio, MARIE_R_PENDING_PROMOTE,
++					  MARIE_R_RESIDENT, &ctx);
++			atomic_long_dec(&t->nr_pending_promote);
++			marie_defer_pending_put(p);
++		}
 +	}
 +}
 +
@@ -4813,99 +4926,181 @@ index 000000000000..1a7fc9cc4a8a
 + */
 +static bool marie_drain_add_queue_chunk(struct marie_lruvec *sl, int max)
 +{
-+	int type, n;
++	int type;
 +
 +	for (type = 0; type < ANON_AND_FILE && max > 0; type++) {
-+		struct llist_head *q = &sl->types[type].add_queue;
++		struct marie_type *t = &sl->types[type];
++		int cpu = t->last_cpu_drained_add;
++		int rounds = 0;
++		bool budget_exhausted = false;
++
 +		/*
-+		 * Local retry chain: wrappers whose install transit failed
-+		 * (gen alloc -ENOMEM under GFP_ATOMIC) are stashed here for
-+		 * the duration of this chunk instead of being re-added to
-+		 * the head of @q. If we re-added them to @q, the next
-+		 * llist_del_first would pop the same wrapper and we would
-+		 * burn the entire @max budget on a single non-progressing
-+		 * item, livelocking under sustained allocator pressure
-+		 * (commonly seen during shutdown's memory churn). With a
-+		 * separate retry chain we visit every wrapper at most once
-+		 * per drain pass; failed wrappers re-enter @q at the end
-+		 * so the next drain (watermark- or isolation-triggered)
-+		 * retries them, by which time the slab pool's GFP_KERNEL
-+		 * refill work has likely freed up gen-cache memory.
++		 * Round-robin per-CPU drain. We resume from
++		 * @last_cpu_drained_add (set by the previous chunk that ran
++		 * out of budget mid-slot), so no CPU is permanently
++		 * starved: each next-chunk call rotates the entry point
++		 * forward by however many slots we processed.
++		 *
++		 * Retry chain is per-slot (declared inside the loop) so
++		 * install-failed wrappers from CPU N are re-attached to
++		 * CPU N's slot, preserving producer-CPU locality.
 +		 */
-+		struct llist_node *retry_first = NULL;
++		while (max > 0 && rounds < num_possible_cpus()) {
++			struct llist_head *q = &t->add_queue[cpu].head;
++			/*
++			 * Local retry chain: wrappers whose install transit
++			 * failed (gen alloc -ENOMEM under GFP_ATOMIC) are
++			 * stashed here for the duration of this slot's chunk
++			 * instead of being re-added to the head of @q
++			 * (which would cause the next llist_del_first to
++			 * pop the same wrapper and burn the budget on a
++			 * single non-progressing item, livelocking under
++			 * sustained allocator pressure). Failed wrappers
++			 * re-enter @q after the slot's chunk so the next
++			 * drain retries them.
++			 *
++			 * Retry entries stay accounted in nr_pending_add
++			 * (still pipeline-live).
++			 */
++			struct llist_node *retry_first = NULL;
++			int n;
 +
-+		for (n = 0; n < max; n++) {
-+			struct llist_node *node = llist_del_first(q);
-+			struct marie_pending *p;
-+			struct folio *folio;
-+			struct marie_transit_ctx ctx = { };
++			for (n = 0; n < max; n++) {
++				struct llist_node *node = llist_del_first(q);
++				struct marie_pending *p;
++				struct folio *folio;
++				struct marie_transit_ctx ctx = { };
 +
-+			if (!node)
-+				break;	/* this type's queue empty */
++				if (!node)
++					break;	/* this slot empty */
 +
-+			p = container_of(node, struct marie_pending, node);
-+			folio = p->folio;
++				p = container_of(node, struct marie_pending,
++						 node);
++				folio = p->folio;
 +
-+			if (!folio_marie_test_tracked(folio)) {
++				if (!folio_marie_test_tracked(folio)) {
++					atomic_long_dec(&t->nr_pending_add);
++					marie_defer_pending_put(p);
++					continue;
++				}
++				if (!list_empty(&folio->lru)) {
++					atomic_long_dec(&t->nr_pending_add);
++					marie_defer_pending_put(p);
++					continue;
++				}
++				if (!marie_transit(sl, folio,
++						 MARIE_R_PENDING_ADD,
++						 MARIE_R_RESIDENT, &ctx)) {
++					p->node.next = retry_first;
++					retry_first = &p->node;
++					continue;
++				}
++				atomic_long_dec(&t->nr_pending_add);
 +				marie_defer_pending_put(p);
-+				continue;
 +			}
-+			if (!list_empty(&folio->lru)) {
-+				marie_defer_pending_put(p);
-+				continue;
-+			}
-+			if (!marie_transit(sl, folio, MARIE_R_PENDING_ADD,
-+					 MARIE_R_RESIDENT, &ctx)) {
-+				/* Stash on local retry chain, not @q. */
-+				p->node.next = retry_first;
-+				retry_first = &p->node;
-+				continue;
-+			}
-+			marie_defer_pending_put(p);
-+		}
-+		max -= n;
++			max -= n;
 +
-+		/* Re-attach retry chain to @q for the next drain pass. */
-+		while (retry_first) {
-+			struct llist_node *next_retry = retry_first->next;
++			/* Re-attach this slot's retry chain to this slot. */
++			while (retry_first) {
++				struct llist_node *nr_retry =
++					retry_first->next;
 +
-+			llist_add(retry_first, q);
-+			retry_first = next_retry;
++				llist_add(retry_first, q);
++				retry_first = nr_retry;
++			}
++
++			if (max == 0) {
++				/* Budget exhausted at this slot; resume here
++				 * next chunk. */
++				t->last_cpu_drained_add = cpu;
++				budget_exhausted = true;
++				break;
++			}
++
++			/* This slot is empty (n < max). Move to next CPU
++			 * with wrap-around. */
++			rounds++;
++			cpu = cpumask_next(cpu, cpu_possible_mask);
++			if (cpu >= nr_cpu_ids)
++				cpu = cpumask_first(cpu_possible_mask);
 +		}
++
++		/* Walked a full round without exhausting budget: queue is
++		 * effectively empty for this type. Persist the cursor so
++		 * the next chunk starts at the next CPU after the last
++		 * non-empty one (avoids always re-checking CPU 0 first). */
++		if (!budget_exhausted)
++			t->last_cpu_drained_add = cpu;
 +	}
 +
-+	return !llist_empty(&sl->types[0].add_queue) ||
-+	       !llist_empty(&sl->types[1].add_queue);
++	return atomic_long_read(&sl->types[0].nr_pending_add) > 0 ||
++	       atomic_long_read(&sl->types[1].nr_pending_add) > 0;
 +}
 +
 +static bool marie_drain_promote_queue_chunk(struct marie_lruvec *sl, int max)
 +{
-+	int type, n;
++	int type;
 +
 +	for (type = 0; type < ANON_AND_FILE && max > 0; type++) {
-+		struct llist_head *q = &sl->types[type].promote_queue;
++		struct marie_type *t = &sl->types[type];
++		int cpu = t->last_cpu_drained_promote;
++		int rounds = 0;
++		bool budget_exhausted = false;
 +
-+		for (n = 0; n < max; n++) {
-+			struct llist_node *node = llist_del_first(q);
-+			struct marie_pending *p;
-+			struct folio *folio;
-+			struct marie_transit_ctx ctx = { };
++		/*
++		 * Round-robin per-CPU drain, mirroring marie_drain_add_queue_chunk.
++		 * No retry chain is needed here — the PENDING_PROMOTE -> RESIDENT
++		 * transit is a pure list_move under the per-type lock and cannot
++		 * fail (the stale-entry case becomes a no-op inside
++		 * __marie_transit_pending_promote_to_resident).
++		 */
++		while (max > 0 && rounds < num_possible_cpus()) {
++			struct llist_head *q = &t->promote_queue[cpu].head;
++			int n;
 +
-+			if (!node)
++			for (n = 0; n < max; n++) {
++				struct llist_node *node = llist_del_first(q);
++				struct marie_pending *p;
++				struct folio *folio;
++				struct marie_transit_ctx ctx;
++
++				if (!node)
++					break;	/* this slot empty */
++
++				p = container_of(node, struct marie_pending,
++						 node);
++				folio = p->folio;
++				ctx = (struct marie_transit_ctx){
++					.type = p->type,
++					.zone = p->zone,
++				};
++
++				(void)marie_transit(sl, folio,
++						  MARIE_R_PENDING_PROMOTE,
++						  MARIE_R_RESIDENT, &ctx);
++				atomic_long_dec(&t->nr_pending_promote);
++				marie_defer_pending_put(p);
++			}
++			max -= n;
++
++			if (max == 0) {
++				t->last_cpu_drained_promote = cpu;
++				budget_exhausted = true;
 +				break;
++			}
 +
-+			p = container_of(node, struct marie_pending, node);
-+			folio = p->folio;
-+
-+			(void)marie_transit(sl, folio, MARIE_R_PENDING_PROMOTE,
-+					  MARIE_R_RESIDENT, &ctx);
-+			marie_defer_pending_put(p);
++			rounds++;
++			cpu = cpumask_next(cpu, cpu_possible_mask);
++			if (cpu >= nr_cpu_ids)
++				cpu = cpumask_first(cpu_possible_mask);
 +		}
-+		max -= n;
++
++		if (!budget_exhausted)
++			t->last_cpu_drained_promote = cpu;
 +	}
 +
-+	return !llist_empty(&sl->types[0].promote_queue) ||
-+	       !llist_empty(&sl->types[1].promote_queue);
++	return atomic_long_read(&sl->types[0].nr_pending_promote) > 0 ||
++	       atomic_long_read(&sl->types[1].nr_pending_promote) > 0;
 +}
 +
 +/*
@@ -4995,16 +5190,30 @@ index 000000000000..1a7fc9cc4a8a
 +static atomic_long_t marie_gen_spare_misses;
 +static atomic_long_t marie_gen_alloc_failures;
 +
++/*
++ * Caller (marie_alloc_lruvec) MUST have populated t->add_queue and
++ * t->promote_queue with cache-line-aligned arrays of nr_cpu_ids
++ * marie_queue_slot entries before invoking marie_type_init; this
++ * routine only initialises the head fields and the non-queue scalars.
++ */
 +static void marie_type_init(struct marie_type *t, int type)
 +{
++	int cpu;
++
 +	spin_lock_init(&t->lock);
 +	t->type = type;
 +	INIT_LIST_HEAD(&t->gens);
 +	t->current_seq = 0;
 +	t->oldest_seq = 0;
 +	atomic_long_set(&t->nr_pages, 0);
-+	init_llist_head(&t->add_queue);
-+	init_llist_head(&t->promote_queue);
++	for_each_possible_cpu(cpu) {
++		init_llist_head(&t->add_queue[cpu].head);
++		init_llist_head(&t->promote_queue[cpu].head);
++	}
++	atomic_long_set(&t->nr_pending_add, 0);
++	atomic_long_set(&t->nr_pending_promote, 0);
++	t->last_cpu_drained_add = cpumask_first(cpu_possible_mask);
++	t->last_cpu_drained_promote = cpumask_first(cpu_possible_mask);
 +	INIT_LIST_HEAD(&t->gen_spare);
 +	t->nr_gen_spare = 0;
 +}
@@ -5342,6 +5551,45 @@ index 000000000000..1a7fc9cc4a8a
 +	INIT_WORK(&sl->drain_work, marie_drain_worker);
 +
 +	for (t = 0; t < ANON_AND_FILE; t++) {
++		/*
++		 * Per-CPU @add_queue and @promote_queue slot arrays. Same
++		 * kmalloc + PTR_ALIGN pattern as @add_count above
++		 * (alloc_percpu would sleep on pcpu_alloc_mutex; this path
++		 * can run under lru_lock). Each slot is cache-line aligned
++		 * (marie_queue_slot is ____cacheline_aligned_in_smp) so
++		 * adjacent CPUs do not false-share their llist heads.
++		 */
++		size_t needed = nr_cpu_ids * sizeof(struct marie_queue_slot);
++		size_t padded = needed + L1_CACHE_BYTES - 1;
++
++		sl->types[t].add_queue_raw = kzalloc(padded, gfp);
++		if (!sl->types[t].add_queue_raw) {
++			while (--t >= 0) {
++				kfree(sl->types[t].add_queue_raw);
++				kfree(sl->types[t].promote_queue_raw);
++			}
++			kfree(sl->add_count_raw);
++			kfree(sl);
++			return NULL;
++		}
++		sl->types[t].add_queue = PTR_ALIGN(sl->types[t].add_queue_raw,
++						   L1_CACHE_BYTES);
++
++		sl->types[t].promote_queue_raw = kzalloc(padded, gfp);
++		if (!sl->types[t].promote_queue_raw) {
++			kfree(sl->types[t].add_queue_raw);
++			while (--t >= 0) {
++				kfree(sl->types[t].add_queue_raw);
++				kfree(sl->types[t].promote_queue_raw);
++			}
++			kfree(sl->add_count_raw);
++			kfree(sl);
++			return NULL;
++		}
++		sl->types[t].promote_queue =
++			PTR_ALIGN(sl->types[t].promote_queue_raw,
++				  L1_CACHE_BYTES);
++
 +		marie_type_init(&sl->types[t], t);
 +		/* gen_spare[] and nr_gen_spare are initialised inside
 +		 * marie_type_init(); the prefill below populates them. */
@@ -5367,6 +5615,15 @@ index 000000000000..1a7fc9cc4a8a
 +	for (t = 0; t < ANON_AND_FILE; t++) {
 +		marie_type_destroy(sl, t);
 +		marie_gen_spare_drain(sl, t);
++		/*
++		 * Per-CPU add_queue and promote_queue slot arrays.
++		 * marie_drop_lruvec has run cancel_work_sync +
++		 * marie_drain_one_lruvec by now, so all per-CPU heads have
++		 * been drained; the kfrees are the matching tail of the
++		 * kzallocs in marie_alloc_lruvec.
++		 */
++		kfree(sl->types[t].add_queue_raw);
++		kfree(sl->types[t].promote_queue_raw);
 +	}
 +	/*
 +	 * At this point the work_struct is guaranteed not to be scheduled
@@ -5545,10 +5802,10 @@ index 000000000000..1a7fc9cc4a8a
 +}
 diff --git a/mm/lru_marie_residency.h b/mm/lru_marie_residency.h
 new file mode 100644
-index 000000000000..0852ca1e1ef3
+index 000000000000..2334573ce1f2
 --- /dev/null
 +++ b/mm/lru_marie_residency.h
-@@ -0,0 +1,1006 @@
+@@ -0,0 +1,1087 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * mm/lru_marie_residency.h — Marie residency ADT (internal to mm/).
@@ -6054,6 +6311,17 @@ index 000000000000..0852ca1e1ef3
 + * semantics).
 + */
 +
++/*
++ * Per-CPU pending-queue slot. One cache line per CPU eliminates false
++ * sharing between adjacent producers' llist_add CMPXCHGs — the entire
++ * point of the per-CPU queue is that each CPU's head cacheline stays
++ * in its own L1 in the M state instead of bouncing across the system
++ * under fault-burst load.
++ */
++struct marie_queue_slot {
++	struct llist_head	head;
++} ____cacheline_aligned_in_smp;
++
 +struct marie_gen {
 +	struct list_head	gen_node;	/* marie_type::gens link */
 +	unsigned long		seq;
@@ -6105,13 +6373,59 @@ index 000000000000..0852ca1e1ef3
 +	atomic_long_t		nr_pages;	/* lockless reads in marie_pick_type */
 +
 +	/*
-+	 * Per-type pending queues. Producers route by folio type at enqueue
-+	 * (folio_is_file_lru). llist is single-producer-multiple-consumer
-+	 * safe; the drain that holds sl->lock is the sole consumer and uses
++	 * Per-type pending queues.
++	 *
++	 * @add_queue is a per-CPU array (nr_cpu_ids slots of
++	 * struct marie_queue_slot, each cache-line aligned) sized at
++	 * marie_alloc_lruvec time. Producers enqueue onto their local
++	 * CPU's slot (this_cpu_ptr-style) so the head cacheline is private
++	 * to the producer; consumers (drain / isolate) iterate every CPU's
++	 * slot under sl->types[type].lock and llist_del_all from each.
++	 * The base pointer is cache-line aligned via the PTR_ALIGN trick;
++	 * @add_queue_raw is the unaligned kmalloc base retained for kfree.
++	 *
++	 * @promote_queue is the legacy per-sl shared llist for the walker
++	 * tier_inc enqueue. Converting it to per-CPU is a follow-up.
++	 *
++	 * llist is single-producer-multiple-consumer-safe; the drain that
++	 * holds sl->lock is the sole consumer for each slot and uses
 +	 * llist_del_all() / llist_del_first().
 +	 */
-+	struct llist_head	add_queue;
-+	struct llist_head	promote_queue;
++	struct marie_queue_slot	*add_queue;	/* nr_cpu_ids slots */
++	void			*add_queue_raw;	/* unaligned base for kfree */
++	struct marie_queue_slot	*promote_queue;	/* nr_cpu_ids slots */
++	void			*promote_queue_raw; /* unaligned base for kfree */
++
++	/*
++	 * Chunked-drain resume cursor: marie_drain_add_queue_chunk walks
++	 * the per-CPU @add_queue slots round-robin, and saves the CPU at
++	 * which the budget ran out so the next chunk picks up there. Touched
++	 * only under sl->types[type].lock (sole writer is the chunked drain
++	 * worker), so a plain int is sufficient. Initial value is
++	 * cpumask_first(cpu_possible_mask) so the very first chunk starts
++	 * at CPU 0.
++	 */
++	int			last_cpu_drained_add;
++	int			last_cpu_drained_promote;
++
++	/*
++	 * Depth gauges for @add_queue and @promote_queue. Producer-inc on
++	 * llist_add (initial enqueue from fault-in / walker tier_inc);
++	 * consumer-dec at terminal disposition (marie_defer_pending_put, or
++	 * marie_pending_free in the isolation success path). Re-queue paths
++	 * (install-failure llist_add back onto @q) do NOT inc again — the
++	 * entry was counted on its original enqueue and never dec'd while
++	 * being processed, so the counter naturally tracks
++	 * "in-queue + in-flight-in-drain" and reaches zero only when the
++	 * pipeline is fully empty.
++	 *
++	 * For the per-CPU @add_queue this counter is critical: scanning
++	 * llist_empty() across all nr_cpu_ids slots at every drain entry
++	 * would be O(NR_CPUS) cacheline fetches; atomic_long_read keeps it
++	 * O(1).
++	 */
++	atomic_long_t		nr_pending_add;
++	atomic_long_t		nr_pending_promote;
 +
 +	/*
 +	 * Pre-allocated reserve of struct marie_gen for this type's gen ring.
@@ -6256,6 +6570,30 @@ index 000000000000..0852ca1e1ef3
 +struct marie_pending {
 +	struct llist_node	node;
 +	struct folio		*folio;
++	/*
++	 * folio metadata snapshot taken at enqueue. The drain skips
++	 * re-reading folio->flags for type/zone, avoiding a second touch
++	 * of the folio cacheline after the producer (walker or fault-in
++	 * path) has already paid for it. Stable across the queue lifetime:
++	 *   - type (folio_is_file_lru): a folio's anon/file class does not
++	 *     flip while TRACKED is held.
++	 *   - zone (folio_zonenum): zone is a function of pfn and never
++	 *     changes for a live folio.
++	 * nr_pages is intentionally not cached here: it can change under
++	 * THP split, and the only consumer in the promote path
++	 * (__marie_transit_resident_to_resident) does not read it.
++	 *
++	 * INVARIANT: any alloc site that publishes a wrapper onto
++	 * sl->types[].add_queue or sl->types[].promote_queue MUST set
++	 * p->type and p->zone before llist_add. The per-CPU LIFO pool
++	 * recycles wrappers without zeroing, so an unset field would be
++	 * read as stale state from a prior use, mis-routing the drain's
++	 * list_move into the wrong (type, zone) gen bucket. Wrappers that
++	 * only travel through marie_deferred_put_q (marie_defer_folio_put)
++	 * may leave these unset — that drain only does folio_put + free.
++	 */
++	u8			type;
++	u8			zone;
 +};
 +
 +/*

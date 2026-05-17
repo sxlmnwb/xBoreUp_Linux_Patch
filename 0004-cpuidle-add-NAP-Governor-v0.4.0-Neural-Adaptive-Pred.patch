@@ -1,4 +1,4 @@
-From b4a339b74a5478f4a9950bded8015c3007702ad2 Mon Sep 17 00:00:00 2001
+From f25a65a18ff94542a7d6274aa5aa9e10862fc6f0 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:32:17 +0700
 Subject: [PATCH 04/11] cpuidle: add NAP Governor v0.4.0 Neural Adaptive
