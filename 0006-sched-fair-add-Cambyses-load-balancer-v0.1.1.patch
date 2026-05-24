@@ -1,4 +1,4 @@
-From 4c8f13b0cf3c4d094f6db09b593dc80669e82751 Mon Sep 17 00:00:00 2001
+From 9b1b9decc19b65b27914ad654102634184cf77dc Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:49:53 +0700
 Subject: [PATCH 06/11] sched/fair: add Cambyses load balancer v0.1.1
@@ -1385,7 +1385,7 @@ index 000000000000..7418e193f218
 +
 +#endif /* CONFIG_SCHED_CAMBYSES */
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index cfe71adfd576..46e0597aec21 100644
+index 398073a47832..c29db690908a 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -63,6 +63,11 @@
@@ -1400,7 +1400,7 @@ index cfe71adfd576..46e0597aec21 100644
  /*
   * The initial- and re-scaling of tunables is configurable
   *
-@@ -9807,12 +9812,21 @@ static void detach_task(struct task_struct *p, struct lb_env *env)
+@@ -9809,12 +9814,21 @@ static void detach_task(struct task_struct *p, struct lb_env *env)
   *
   * Returns a task if successful and NULL otherwise.
   */
@@ -1422,7 +1422,7 @@ index cfe71adfd576..46e0597aec21 100644
  	list_for_each_entry_reverse(p,
  			&env->src_rq->cfs_tasks, se.group_node) {
  		if (!can_migrate_task(p, env))
-@@ -9859,6 +9873,11 @@ static int detach_tasks(struct lb_env *env)
+@@ -9861,6 +9875,11 @@ static int detach_tasks(struct lb_env *env)
  	if (env->imbalance <= 0)
  		return 0;
  

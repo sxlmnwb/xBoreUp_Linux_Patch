@@ -1,31 +1,29 @@
-From 455b57fc031508c61a7b502b8129bed2c5d51ab3 Mon Sep 17 00:00:00 2001
-From: Salman Wahib <sxlmnwb.dev@gmail.com>
-Date: Thu, 23 Apr 2026 18:44:43 +0700
-Subject: [PATCH 05/11] zram: add Immediate Recompression v1.2 ZRAM Immediate
- Recompression (ZRAM-IR) enhances ZRAM multi-compressor behavior by trying
- multiple higher-priority compressors sequentially during page write,
- selecting the first that achieves sufficient compression ratio instead of
- falling back to uncompressed storage.
+From 05e2550e79fb5e4887eee329d4a9616ff467a7e0 Mon Sep 17 00:00:00 2001
+From: Masahito S <firelzrd@gmail.com>
+Date: Fri, 1 May 2026 14:21:27 +0900
+Subject: [PATCH 05/11] zram: add Immediate Recompression v1.2
 
-replace function zram_set_priority() to set_slot_comp_priority()
-after linux-7.0.y release
+ZRAM Immediate Recompression (ZRAM-IR) enhances ZRAM multi-compressor behavior
+by trying multiple higher-priority compressors sequentially during page write,
+selecting the first that achieves sufficient compression ratio instead of
+falling back to uncompressed storage.
 
 Source: https://github.com/firelzrd/zram-ir
-Patch: 0001-linux6.16.0-zram-ir-1.2.patch
+Patch: 0001-linux7.1-rc1-zram-ir-1.2.patch
 
 Co-authored-by: Masahito S <firelzrd@gmail.com>
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
 ---
- drivers/block/zram/zram_drv.c | 91 +++++++++++++++++++++++++++--------
- 1 file changed, 72 insertions(+), 19 deletions(-)
+ drivers/block/zram/zram_drv.c | 90 ++++++++++++++++++++++++++++-------
+ 1 file changed, 72 insertions(+), 18 deletions(-)
 
 diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
-index 85943da0cdca..0201cbdcb604 100644
+index aaaef8dd8253..383113db1cf1 100644
 --- a/drivers/block/zram/zram_drv.c
 +++ b/drivers/block/zram/zram_drv.c
-@@ -53,6 +53,23 @@ static unsigned int num_devices = 1;
-  */
- static size_t huge_class_size;
+@@ -55,6 +55,23 @@ static size_t huge_class_size;
+ 
+ static const struct block_device_operations zram_devops;
  
 +#ifdef CONFIG_ZRAM_MULTI_COMP
 +u8 __read_mostly sysctl_zram_recomp_immediate = 1;
@@ -44,10 +42,10 @@ index 85943da0cdca..0201cbdcb604 100644
 +static struct ctl_table_header *zram_sysctl_table_header;
 +#endif //CONFIG_ZRAM_MULTI_COMP
 +
- static const struct block_device_operations zram_devops;
- 
  static void slot_free(struct zram *zram, u32 index);
-@@ -2198,7 +2215,7 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
+ #define slot_dep_map(zram, index) (&(zram)->table[(index)].dep_map)
+ 
+@@ -2202,7 +2219,7 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
  }
  
  static int write_incompressible_page(struct zram *zram, struct page *page,
@@ -56,7 +54,7 @@ index 85943da0cdca..0201cbdcb604 100644
  {
  	unsigned long handle;
  	void *src;
-@@ -2228,6 +2245,7 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
+@@ -2232,6 +2249,7 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
  	set_slot_flag(zram, index, ZRAM_HUGE);
  	set_slot_handle(zram, index, handle);
  	set_slot_size(zram, index, PAGE_SIZE);
@@ -64,7 +62,7 @@ index 85943da0cdca..0201cbdcb604 100644
  	slot_unlock(zram, index);
  
  	atomic64_add(PAGE_SIZE, &zram->stats.compr_data_size);
-@@ -2244,9 +2262,13 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
+@@ -2248,9 +2266,13 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
  	unsigned long handle;
  	unsigned int comp_len;
  	void *mem;
@@ -72,14 +70,14 @@ index 85943da0cdca..0201cbdcb604 100644
 +	struct zcomp_strm *zstrm = NULL;
  	unsigned long element;
  	bool same_filled;
-+	u8 prio, prio_max = zram->num_active_comps;
++	u8 prio, prio_max = ZRAM_MAX_COMPS;
 +#ifdef CONFIG_ZRAM_MULTI_COMP
-+	prio_max = min(prio_max, sysctl_zram_recomp_immediate + 1);
++	prio_max = min_t(u8, prio_max, sysctl_zram_recomp_immediate + 1);
 +#endif //CONFIG_ZRAM_MULTI_COMP
  
  	mem = kmap_local_page(page);
  	same_filled = page_same_filled(mem, &element);
-@@ -2254,50 +2276,68 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
+@@ -2258,50 +2280,69 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
  	if (same_filled)
  		return write_same_filled_page(zram, element, index);
  
@@ -117,7 +115,7 @@ index 85943da0cdca..0201cbdcb604 100644
 -		zcomp_stream_put(zstrm);
 -		return write_incompressible_page(zram, page, index);
 +	if (!zstrm) {
-+		if (prio >= zram->num_active_comps) {
++		if (prio >= ZRAM_MAX_COMPS) {
 +			slot_lock(zram, index);
 +			set_slot_flag(zram, index, ZRAM_INCOMPRESSIBLE);
 +			slot_unlock(zram, index);
@@ -149,7 +147,7 @@ index 85943da0cdca..0201cbdcb604 100644
 -	zcomp_stream_put(zstrm);
  
  	slot_lock(zram, index);
--	slot_free(zram, index);
+ 	slot_free(zram, index);
  	set_slot_handle(zram, index, handle);
  	set_slot_size(zram, index, comp_len);
 +	set_slot_comp_priority(zram, index, prio);
@@ -165,7 +163,7 @@ index 85943da0cdca..0201cbdcb604 100644
  	return ret;
  }
  
-@@ -3292,6 +3332,15 @@ static int __init zram_init(void)
+@@ -3296,6 +3337,15 @@ static int __init zram_init(void)
  		num_devices--;
  	}
  
@@ -181,7 +179,7 @@ index 85943da0cdca..0201cbdcb604 100644
  	return 0;
  
  out_error:
-@@ -3301,6 +3350,10 @@ static int __init zram_init(void)
+@@ -3305,6 +3355,10 @@ static int __init zram_init(void)
  
  static void __exit zram_exit(void)
  {

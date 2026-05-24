@@ -1,11 +1,10 @@
-From 974c27ad304e130190b5d0942f4dfddaeffc82a9 Mon Sep 17 00:00:00 2001
+From 3571e259a15ca5e62da08d844443caf56ef6eade Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 11:42:38 +0900
-Subject: [PATCH 02/11] sched/fair: add POC Selector v2.6.1r2 Piece-Of-Cake
- (POC)
+Subject: [PATCH 02/11] sched/fair: add POC Selector v2.6.1r2
 
-O(1) Idle CPU Selector for select_idle_cpu() hot path. Uses per-LLC
-atomic64_t bitmaps with lock-free reads for O(1) idle CPU discovery,
+Piece-Of-Cake (POC) O(1) Idle CPU Selector for select_idle_cpu() hot path.
+Uses per-LLC atomic64_t bitmaps with lock-free reads for O(1) idle CPU discovery,
 replacing the default O(n) linear scan.
 
 Source: https://github.com/firelzrd/poc-selector
@@ -26,7 +25,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  create mode 100644 kernel/sched/poc_selector.c
 
 diff --git a/include/linux/sched/topology.h b/include/linux/sched/topology.h
-index 45c0022b91ce..93edf3a1d61b 100644
+index 6f8a4ae860da..8ade04cb1ca6 100644
 --- a/include/linux/sched/topology.h
 +++ b/include/linux/sched/topology.h
 @@ -66,8 +66,54 @@ struct sched_group;
@@ -111,7 +110,7 @@ index 4cf628106dd0..bca9e7c553b9 100644
  	bool "Kernel->user space relay support (formerly relayfs)"
  	select IRQ_WORK
 diff --git a/kernel/sched/ext.c b/kernel/sched/ext.c
-index 9c7ff5179e4f..cec7e3adecc2 100644
+index 3ac01ea9bfb1..c13c56b91041 100644
 --- a/kernel/sched/ext.c
 +++ b/kernel/sched/ext.c
 @@ -4513,6 +4513,9 @@ static void scx_disable_workfn(struct kthread_work *work)
@@ -136,7 +135,7 @@ index 9c7ff5179e4f..cec7e3adecc2 100644
  		sch->ops.name, scx_switched_all() ? "" : " (partial)");
  	kobject_uevent(&sch->kobj, KOBJ_ADD);
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index 630896fc035d..cfe71adfd576 100644
+index 1d3c8d1292ea..398073a47832 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -49,6 +49,7 @@
@@ -147,7 +146,7 @@ index 630896fc035d..cfe71adfd576 100644
  
  #include <asm/switch_to.h>
  
-@@ -1177,7 +1178,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
+@@ -1172,7 +1173,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
  
  #include "pelt.h"
  
@@ -156,7 +155,7 @@ index 630896fc035d..cfe71adfd576 100644
  static unsigned long task_h_load(struct task_struct *p);
  static unsigned long capacity_of(int cpu);
  
-@@ -7706,6 +7707,20 @@ void __update_idle_core(struct rq *rq)
+@@ -7701,6 +7702,20 @@ void __update_idle_core(struct rq *rq)
  	rcu_read_unlock();
  }
  
@@ -177,7 +176,7 @@ index 630896fc035d..cfe71adfd576 100644
  /*
   * Scan the entire LLC domain for idle cores; this dynamically switches off if
   * there are no idle cores left in the system; tracked through
-@@ -7773,6 +7788,11 @@ static inline bool test_idle_cores(int cpu)
+@@ -7768,6 +7783,11 @@ static inline bool test_idle_cores(int cpu)
  	return false;
  }
  
@@ -189,7 +188,7 @@ index 630896fc035d..cfe71adfd576 100644
  static inline int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus, int *idle_cpu)
  {
  	return __select_idle_cpu(core, p);
-@@ -7922,16 +7942,38 @@ static inline bool asym_fits_cpu(unsigned long util,
+@@ -7917,16 +7937,38 @@ static inline bool asym_fits_cpu(unsigned long util,
  	return true;
  }
  
@@ -229,7 +228,7 @@ index 630896fc035d..cfe71adfd576 100644
  	/*
  	 * On asymmetric system, update task utilization because we will check
  	 * that the task fits with CPU's capacity.
-@@ -7948,23 +7990,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -7943,23 +7985,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	 */
  	lockdep_assert_irqs_disabled();
  
@@ -258,7 +257,7 @@ index 630896fc035d..cfe71adfd576 100644
  
  	/*
  	 * Allow a per-cpu kthread to stack with the wakee if the
-@@ -7982,24 +8014,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -7977,24 +8009,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  		return prev;
  	}
  
@@ -283,7 +282,7 @@ index 630896fc035d..cfe71adfd576 100644
  	/*
  	 * For asymmetric CPU capacity systems, our domain of interest is
  	 * sd_asym_cpucapacity rather than sd_llc.
-@@ -8024,6 +8038,74 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8019,6 +8033,74 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	if (!sd)
  		return target;
  
@@ -358,7 +357,7 @@ index 630896fc035d..cfe71adfd576 100644
  	if (sched_smt_active()) {
  		has_idle_core = test_idle_cores(target);
  
-@@ -8038,6 +8120,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8033,6 +8115,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	if ((unsigned)i < nr_cpumask_bits)
  		return i;
  
@@ -368,7 +367,7 @@ index 630896fc035d..cfe71adfd576 100644
  	/*
  	 * For cluster machines which have lower sharing cache like L2 or
  	 * LLC Tag, we tend to find an idle CPU in the target's cluster
-@@ -8049,6 +8134,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8044,6 +8129,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	if ((unsigned int)recent_used_cpu < nr_cpumask_bits)
  		return recent_used_cpu;
  
@@ -382,7 +381,7 @@ index 630896fc035d..cfe71adfd576 100644
  	return target;
  }
  
-@@ -8731,7 +8823,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
+@@ -8726,7 +8818,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
  		new_cpu = sched_balance_find_dst_cpu(sd, p, cpu, prev_cpu, sd_flag);
  	} else if (wake_flags & WF_TTWU) { /* XXX always ? */
  		/* Fast path */
@@ -2363,10 +2362,10 @@ index cfe2a84b5225..2f6f8006732a 100644
  
  #if defined(CONFIG_SCHED_CORE) && defined(CONFIG_SCHEDSTATS)
 diff --git a/kernel/sched/topology.c b/kernel/sched/topology.c
-index 32dcddaead82..dcec1f6e506d 100644
+index 2864f43bff6d..40e7e1e281e7 100644
 --- a/kernel/sched/topology.c
 +++ b/kernel/sched/topology.c
-@@ -1735,6 +1735,232 @@ sd_init(struct sched_domain_topology_level *tl,
+@@ -1733,6 +1733,232 @@ sd_init(struct sched_domain_topology_level *tl,
  		sd->shared = *per_cpu_ptr(sdd->sds, sd_id);
  		atomic_inc(&sd->shared->ref);
  		atomic_set(&sd->shared->nr_busy_cpus, sd_weight);

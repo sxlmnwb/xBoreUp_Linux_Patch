@@ -1,4 +1,4 @@
-From 9ea3c631a70b9afe41463e08f36e91e1bcf3f34a Mon Sep 17 00:00:00 2001
+From a7ba033d2e16042fc33a20a6baf0a79df70fc868 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 12:01:28 +0900
 Subject: [PATCH 10/11] mm: add lru_marie MARIE LRU v0.1.5
@@ -858,10 +858,10 @@ index 000000000000..ca977eff4d9f
 +CONFIG_KUNIT=y
 +CONFIG_SVECLIST_KUNIT_TEST=y
 diff --git a/mm/Kconfig b/mm/Kconfig
-index ebd8ea353687..4425b07bb4a8 100644
+index befa8909ae29..dbed604563c7 100644
 --- a/mm/Kconfig
 +++ b/mm/Kconfig
-@@ -1397,6 +1397,43 @@ config LRU_GEN_WALKS_MMU
+@@ -1398,6 +1398,43 @@ config LRU_GEN_WALKS_MMU
  	depends on LRU_GEN && ARCH_HAS_HW_PTE_YOUNG
  # }
  
