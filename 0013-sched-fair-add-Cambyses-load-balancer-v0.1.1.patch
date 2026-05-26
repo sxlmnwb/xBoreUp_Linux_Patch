@@ -1,7 +1,7 @@
-From 9b1b9decc19b65b27914ad654102634184cf77dc Mon Sep 17 00:00:00 2001
+From f8877b5d7a733869825807d328d22185006954ea Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:49:53 +0700
-Subject: [PATCH 06/11] sched/fair: add Cambyses load balancer v0.1.1
+Subject: [PATCH 13/18] sched/fair: add Cambyses load balancer v0.1.1
 
 Context-Aware Migration Balancer Yielding Scored Entity Selection.
 Replaces FIFO task selection in CFS load balancer with scoring-based

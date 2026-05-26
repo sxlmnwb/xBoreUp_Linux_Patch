@@ -1,7 +1,7 @@
-From dd0d0c3cf27e022910850a21cf81ba6f46b95004 Mon Sep 17 00:00:00 2001
+From 50220c819b4447b16cdde6f7700996ffa1b1260d Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:21:50 +0700
-Subject: [PATCH 01/11] sched: add BORE Scheduler v6.6.3
+Subject: [PATCH 08/18] sched: add BORE Scheduler v6.6.3
 
 Burst-Oriented Response Enhancer (BORE) scheduler improves interactivity
 by tracking burst behavior per-task and adjusting vruntime penalties accordingly.

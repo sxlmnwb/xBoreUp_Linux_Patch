@@ -1,7 +1,7 @@
-From 3571e259a15ca5e62da08d844443caf56ef6eade Mon Sep 17 00:00:00 2001
+From 63d366d10e7dfb88cc8b16fb72d5e5bbf74db61b Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 11:42:38 +0900
-Subject: [PATCH 02/11] sched/fair: add POC Selector v2.6.1r2
+Subject: [PATCH 09/18] sched/fair: add POC Selector v2.6.1r2
 
 Piece-Of-Cake (POC) O(1) Idle CPU Selector for select_idle_cpu() hot path.
 Uses per-LLC atomic64_t bitmaps with lock-free reads for O(1) idle CPU discovery,
