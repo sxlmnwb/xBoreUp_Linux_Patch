@@ -1,7 +1,7 @@
-From fee0c4ade5bf59a09669b4c758ba61411f860d86 Mon Sep 17 00:00:00 2001
+From f167a887b9ff12f4331ada3990545bf4b7953121 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Tue, 26 May 2026 12:33:31 +0900
-Subject: [PATCH 15/18] mm: add lru_marie MARIE LRU v0.2.2
+Date: Wed, 27 May 2026 13:28:36 +0900
+Subject: [PATCH 15/18] mm: add lru_marie MARIE LRU v0.2.4
 
 Memory-Aware Reclaim with Intelligent Eviction.
 Replaces le9uo working set protection and Re-swappiness,
@@ -10,7 +10,7 @@ LRU reclaim subsystem featuring smarter page eviction, async swap
 compression via kcompmari, and hardware-accelerated PTE scanning (SSE2/AVX2/AVX-512/NEON).
 
 Source: https://github.com/firelzrd/lru_marie
-Patch: 0001-linux7.0-lru_marie-0.2.2.patch
+Patch: 0001-linux7.0-lru_marie-0.2.4.patch
 
 Co-authored-by: Masahito S <firelzrd@gmail.com>
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
@@ -34,7 +34,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  mm/lru_marie/simd_x86_avx2.S   |  214 +++
  mm/lru_marie/simd_x86_avx512.S |  199 +++
  mm/lru_marie/simd_x86_sse2.S   |  215 +++
- mm/lru_marie/state.c           | 2594 ++++++++++++++++++++++++++++++++
+ mm/lru_marie/state.c           | 2651 ++++++++++++++++++++++++++++++++
  mm/lru_marie/state.h           | 1293 ++++++++++++++++
  mm/lru_marie/version.h         |   22 +
  mm/lru_marie/walker.c          |  960 ++++++++++++
@@ -47,7 +47,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  mm/swap.c                      |  102 ++
  mm/swap.h                      |    4 +
  mm/vmscan.c                    |  334 +++-
- 32 files changed, 9542 insertions(+), 6 deletions(-)
+ 32 files changed, 9599 insertions(+), 6 deletions(-)
  create mode 100644 include/linux/lru_marie.h
  create mode 100644 mm/lru_marie/Makefile
  create mode 100644 mm/lru_marie/bitmap.c
@@ -4240,10 +4240,10 @@ index 000000000000..4646ca1b9cec
 +SYM_FUNC_END(lru_marie_simd_scan_sse2)
 diff --git a/mm/lru_marie/state.c b/mm/lru_marie/state.c
 new file mode 100644
-index 000000000000..5ba608782c07
+index 000000000000..a87bfcaa3c04
 --- /dev/null
 +++ b/mm/lru_marie/state.c
-@@ -0,0 +1,2594 @@
+@@ -0,0 +1,2651 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Marie per-PFN state array — allocation, init, and global counters.
@@ -5054,6 +5054,15 @@ index 000000000000..5ba608782c07
 +			VM_WARN_ON_ONCE_FOLIO(1, f);
 +			folio_clear_lru(f);
 +		}
++		/*
++		 * shrink_folio_list can re-set PG_active on a folio whose
++		 * PG_lru is clear (Marie isolated it). PG_active is in
++		 * PAGE_FLAGS_CHECK_AT_FREE; if still set here it would
++		 * trigger bad_page in free_pages_prepare. Clear it
++		 * unconditionally as a last-resort safety net.
++		 */
++		if (unlikely(folio_test_active(f)))
++			folio_clear_active(f);
 +	}
 +
 +	marie_state[pfn] = 0;
@@ -5936,8 +5945,56 @@ index 000000000000..5ba608782c07
 +				}
 +				preempt_enable();
 +
-+				folio_set_lru(f);
-+				folio_put(f);
++				if (!folio_put_testzero(f)) {
++					/*
++					 * Isolation ref dropped, folio still alive.
++					 * Set PG_lru so the next scan can re-isolate
++					 * it via folio_test_clear_lru.
++					 */
++					folio_set_lru(f);
++				} else {
++					/*
++					 * Isolation ref was the last one -- folio is
++					 * being freed now. PG_lru is clear (was cleared
++					 * at isolation), so __folio_put's
++					 * __page_cache_release will not call
++					 * del_page_from_lru_list and will not underflow
++					 * mz->lru_zone_size (which Marie never
++					 * increments for tracked folios -- only
++					 * mlv->marie_lru_zone_size is used).
++					 *
++					 * shrink_folio_list's activate_locked path may
++					 * set PG_active on a folio whose PG_lru is
++					 * already clear (Marie isolated it). Normally
++					 * PAGE_FLAGS_CHECK_AT_FREE is satisfied because
++					 * folio_activate() checks PG_lru and is a no-op
++					 * when it is clear -- but some stock paths set
++					 * PG_active directly (e.g. folio_set_active in
++					 * the deactivate batch). Clear it here; the
++					 * folio has no live references and is not on any
++					 * LRU list, so clearing PG_active is safe.
++					 *
++					 * Undo the putback counter increments before
++					 * completing the free. Bitmaps and TRACKED are
++					 * cleaned at buddy handoff by
++					 * marie_state_drop_pfn_at_free.
++					 */
++					folio_clear_active(f);
++					preempt_disable();
++					marie_pc_add(&marie_nr_folios, -1);
++					marie_update_lru_size(lv, inst_lru, zone, -nr);
++					if (likely(mlv)) {
++						marie_pc_add(
++							&mlv->types[type_idx].nr_pages,
++							-nr);
++						marie_pc_add(
++							&mlv->marie_lru_zone_size
++								[inst_lru][zone],
++							-nr);
++					}
++					preempt_enable();
++					__folio_put(f);
++				}
 +			}
 +
 +			/*
@@ -8139,7 +8196,7 @@ index 000000000000..be174a271e12
 +#endif /* _MM_LRU_MARIE_STATE_H */
 diff --git a/mm/lru_marie/version.h b/mm/lru_marie/version.h
 new file mode 100644
-index 000000000000..c3f75cd96bfc
+index 000000000000..7408c9719e02
 --- /dev/null
 +++ b/mm/lru_marie/version.h
 @@ -0,0 +1,22 @@
@@ -8162,7 +8219,7 @@ index 000000000000..c3f75cd96bfc
 +#define MARIE_PROGNAME	"Marie LRU"
 +#define MARIE_AUTHOR	"Masahito Suzuki"
 +
-+#define MARIE_VERSION	"0.2.2"
++#define MARIE_VERSION	"0.2.4"
 +
 +#endif /* _MM_LRU_MARIE_VERSION_H */
 diff --git a/mm/lru_marie/walker.c b/mm/lru_marie/walker.c
