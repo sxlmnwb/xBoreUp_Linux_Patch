@@ -1,4 +1,4 @@
-From 85df90b8e88d81a887c4b7058e1b438b4cb41926 Mon Sep 17 00:00:00 2001
+From 7da46365d84fdbe4df75afcf31d77b983f128772 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 11:45:55 +0700
 Subject: [PATCH 17/18] scripts/setlocalversion: remove '+' tag for git repo

@@ -1,4 +1,4 @@
-From 63d366d10e7dfb88cc8b16fb72d5e5bbf74db61b Mon Sep 17 00:00:00 2001
+From 56a0ec271c98e6cafad3a4f75ddeb50e77d1a44a Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 11:42:38 +0900
 Subject: [PATCH 09/18] sched/fair: add POC Selector v2.6.1r2
@@ -110,10 +110,10 @@ index 4cf628106dd0..bca9e7c553b9 100644
  	bool "Kernel->user space relay support (formerly relayfs)"
  	select IRQ_WORK
 diff --git a/kernel/sched/ext.c b/kernel/sched/ext.c
-index 3ac01ea9bfb1..c13c56b91041 100644
+index 38157fc58c5c..3ec15f5c9e21 100644
 --- a/kernel/sched/ext.c
 +++ b/kernel/sched/ext.c
-@@ -4513,6 +4513,9 @@ static void scx_disable_workfn(struct kthread_work *work)
+@@ -4514,6 +4514,9 @@ static void scx_disable_workfn(struct kthread_work *work)
  	mutex_unlock(&scx_enable_mutex);
  
  	WARN_ON_ONCE(scx_set_enable_state(SCX_DISABLED) != SCX_DISABLING);
@@ -123,7 +123,7 @@ index 3ac01ea9bfb1..c13c56b91041 100644
  done:
  	scx_bypass(false);
  }
-@@ -5297,6 +5300,10 @@ static void scx_enable_workfn(struct kthread_work *work)
+@@ -5298,6 +5301,10 @@ static void scx_enable_workfn(struct kthread_work *work)
  	if (!(ops->flags & SCX_OPS_SWITCH_PARTIAL))
  		static_branch_enable(&__scx_switched_all);
  
