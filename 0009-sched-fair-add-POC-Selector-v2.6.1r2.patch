@@ -1,4 +1,4 @@
-From 56a0ec271c98e6cafad3a4f75ddeb50e77d1a44a Mon Sep 17 00:00:00 2001
+From 551c6dbe8e3b9bd82bf48d7d260fdc8ddeebc126 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 11:42:38 +0900
 Subject: [PATCH 09/18] sched/fair: add POC Selector v2.6.1r2

@@ -1,4 +1,4 @@
-From af6dc90f39fa5daf445da9c653d07c5e0facf40b Mon Sep 17 00:00:00 2001
+From f83c6c06f8d6245a9fec1e7eb6b91eb87f02a4ea Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:22:38 +0700
 Subject: [PATCH 07/18] iommu: enable posted MSI by default

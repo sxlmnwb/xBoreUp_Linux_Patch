@@ -1,4 +1,4 @@
-From feb57850ea88d3275517adc51049040f3ce87545 Mon Sep 17 00:00:00 2001
+From 79b2675f9e430ef10e5fb475e586e700f0d8b042 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:21:50 +0700
 Subject: [PATCH 08/18] sched: add BORE Scheduler v6.6.3
