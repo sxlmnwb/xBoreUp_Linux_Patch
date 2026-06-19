@@ -1,4 +1,4 @@
-From 6f4215850c6ecf20d3b537384cae836bee021582 Mon Sep 17 00:00:00 2001
+From 35ee61b28ab071d3e5ea61666b134948aa6995a8 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Fri, 5 Jun 2026 13:10:05 +0900
 Subject: [PATCH 11/18] cpuidle: add NAP Governor v0.5.0
@@ -31,7 +31,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  create mode 100644 drivers/cpuidle/governors/nap/nap_nn_sse2.c
 
 diff --git a/drivers/cpuidle/Kconfig b/drivers/cpuidle/Kconfig
-index cac5997dca50..9b6c50f0d8c9 100644
+index d6d8386d3f02..491b7809fa86 100644
 --- a/drivers/cpuidle/Kconfig
 +++ b/drivers/cpuidle/Kconfig
 @@ -44,6 +44,23 @@ config CPU_IDLE_GOV_HALTPOLL

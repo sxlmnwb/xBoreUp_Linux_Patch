@@ -1,6 +1,6 @@
 # xBoreUp Linux Patch
 
-A curated collection of performance and responsiveness patches for Linux `linux-7.0.y`.
+A curated collection of performance and responsiveness patches for Linux `linux-7.1.y`.
 
 ## Patch List
 
@@ -18,8 +18,8 @@ A curated collection of performance and responsiveness patches for Linux `linux-
 |---|-------|-------------|
 | 0004 | `sched: rate-limit sched_yield to once per jiffy` | Prevent yield spam in Proton/Wine games that abuse `sched_yield()` |
 | 0008 | [`sched: add BORE Scheduler`](https://github.com/firelzrd/bore-scheduler) | Burst-Oriented Response Enhancer — improves desktop interactivity |
-| 0009 | [`sched/fair: add POC Selector`](https://github.com/firelzrd/poc-selector) | Piece Of Cake task selector for the fair scheduler |
-| 0013 | [`sched/fair: add Cambyses load balancer`](https://github.com/firelzrd/cambyses) | Alternative load balancer for better multi-core task distribution |
+| 0009 | [`sched: add POC Selector`](https://github.com/firelzrd/poc-selector) | Piece Of Cake task selector for the fair scheduler |
+| 0013 | [`sched: add Cambyses load balancer`](https://github.com/firelzrd/cambyses) | Alternative load balancer for better multi-core task distribution |
 
 ### Memory Management
 

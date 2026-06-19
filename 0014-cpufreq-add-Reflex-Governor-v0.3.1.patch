@@ -1,4 +1,4 @@
-From ecd6d2fb1dd53aaed9910ff36a0239bd3fcbdf22 Mon Sep 17 00:00:00 2001
+From b1dced5820cab82d8dd66845732f3a8125932121 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Fri, 1 May 2026 16:52:28 +0900
 Subject: [PATCH 14/18] cpufreq: add Reflex Governor v0.3.1
@@ -39,10 +39,10 @@ index 7ffc78d5ebf2..4271bcc71fe4 100644
  static u64 arch_turbo_freq_ratio = SCHED_CAPACITY_SCALE;
  static u64 arch_max_freq_ratio = SCHED_CAPACITY_SCALE;
 diff --git a/drivers/cpufreq/Kconfig b/drivers/cpufreq/Kconfig
-index 78702a08364f..3a94ff5621f4 100644
+index db83f3365698..65c7f4918ea5 100644
 --- a/drivers/cpufreq/Kconfig
 +++ b/drivers/cpufreq/Kconfig
-@@ -203,6 +203,30 @@ config CPU_FREQ_GOV_SCHEDUTIL
+@@ -202,6 +202,30 @@ config CPU_FREQ_GOV_SCHEDUTIL
  
  	  If in doubt, say N.
  
@@ -86,10 +86,10 @@ index 385c9fcc65c6..4e369f8eb7bb 100644
  obj-$(CONFIG_CPUFREQ_DT)		+= cpufreq-dt.o
  obj-$(CONFIG_CPUFREQ_DT_RUST)		+= rcpufreq_dt.o
 diff --git a/drivers/cpufreq/cpufreq.c b/drivers/cpufreq/cpufreq.c
-index 44441ceedb76..7407d1798e3a 100644
+index 44eb1b7e7fc1..323cdcf020d8 100644
 --- a/drivers/cpufreq/cpufreq.c
 +++ b/drivers/cpufreq/cpufreq.c
-@@ -2051,6 +2051,7 @@ bool cpufreq_driver_test_flags(u16 flags)
+@@ -2044,6 +2044,7 @@ bool cpufreq_driver_test_flags(u16 flags)
  {
  	return !!(cpufreq_driver->flags & flags);
  }
@@ -97,7 +97,7 @@ index 44441ceedb76..7407d1798e3a 100644
  
  /**
   * cpufreq_get_current_driver - Return the current driver's name.
-@@ -2254,6 +2255,7 @@ void cpufreq_driver_adjust_perf(struct cpufreq_policy *policy,
+@@ -2247,6 +2248,7 @@ void cpufreq_driver_adjust_perf(struct cpufreq_policy *policy,
  {
  	cpufreq_driver->adjust_perf(policy, min_perf, target_perf, capacity);
  }
@@ -105,7 +105,7 @@ index 44441ceedb76..7407d1798e3a 100644
  
  /**
   * cpufreq_driver_has_adjust_perf - Check "direct fast switch" callback.
-@@ -2265,6 +2267,7 @@ bool cpufreq_driver_has_adjust_perf(void)
+@@ -2258,6 +2260,7 @@ bool cpufreq_driver_has_adjust_perf(void)
  {
  	return !!cpufreq_driver->adjust_perf;
  }
@@ -1388,10 +1388,10 @@ index ae9fd211cec1..a1d66273cf32 100644
 +}
 +EXPORT_SYMBOL_GPL(cpufreq_scx_switched_all);
 diff --git a/kernel/time/tick-sched.c b/kernel/time/tick-sched.c
-index d1f27df1e60e..fca1ca7e081b 100644
+index cbbb87a0c6e7..8501657277bd 100644
 --- a/kernel/time/tick-sched.c
 +++ b/kernel/time/tick-sched.c
-@@ -1415,6 +1415,7 @@ unsigned long tick_nohz_get_idle_calls_cpu(int cpu)
+@@ -1428,6 +1428,7 @@ unsigned long tick_nohz_get_idle_calls_cpu(int cpu)
  
  	return ts->idle_calls;
  }

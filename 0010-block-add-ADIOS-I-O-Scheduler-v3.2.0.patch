@@ -1,4 +1,4 @@
-From e06bf455fe64dd083c6322196c3defab9294c407 Mon Sep 17 00:00:00 2001
+From 109b56c02c965ab132fb90645b50410a9144d4f4 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:30:02 +0700
 Subject: [PATCH 10/18] block: add ADIOS I/O Scheduler v3.2.0
@@ -47,7 +47,7 @@ index 27f11320b8d1..e98585dd83e0 100644
  	tristate "BFQ I/O scheduler"
  	select BLK_ICQ
 diff --git a/block/Makefile b/block/Makefile
-index c65f4da93702..105b12fd86b8 100644
+index 7dce2e44276c..1f2cd95cfda7 100644
 --- a/block/Makefile
 +++ b/block/Makefile
 @@ -22,6 +22,7 @@ obj-$(CONFIG_BLK_CGROUP_IOLATENCY)	+= blk-iolatency.o

@@ -1,4 +1,4 @@
-From a24d34f4b25e3afc212f023ee4b46e088a8abec8 Mon Sep 17 00:00:00 2001
+From bb2457b8b875bb554441877bcea8976a2bc63d09 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:38:34 +0700
 Subject: [PATCH 02/18] net/tcp: increase TCP write buffer limit from 4MB to
@@ -11,10 +11,10 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index b515d1094425..e6baf94c9e85 100644
+index 31e13af6f955..58e287c4cf19 100644
 --- a/net/ipv4/tcp.c
 +++ b/net/ipv4/tcp.c
-@@ -5353,7 +5353,7 @@ void __init tcp_init(void)
+@@ -5367,7 +5367,7 @@ void __init tcp_init(void)
  	tcp_init_mem();
  	/* Set per-socket limits to no more than 1/128 the pressure threshold */
  	limit = nr_free_buffer_pages() << (PAGE_SHIFT - 7);
