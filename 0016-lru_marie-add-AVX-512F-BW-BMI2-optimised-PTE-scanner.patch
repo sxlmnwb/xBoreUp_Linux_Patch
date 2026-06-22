@@ -1,4 +1,4 @@
-From 6d371bbfae776f2a0603fe691d1e58314984afc1 Mon Sep 17 00:00:00 2001
+From f31375ea17dd569e5202ebc6cfb3add44ee3314e Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
 Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
@@ -7,9 +7,9 @@ Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
 ---
  mm/lru_marie/Makefile               |   1 +
- mm/lru_marie/simd_x86.c             |  11 +-
+ mm/lru_marie/simd_x86.c             |  51 +++--
  mm/lru_marie/simd_x86_avx512_zen5.S | 313 ++++++++++++++++++++++++++++
- 3 files changed, 323 insertions(+), 2 deletions(-)
+ 3 files changed, 350 insertions(+), 15 deletions(-)
  create mode 100644 mm/lru_marie/simd_x86_avx512_zen5.S
 
 diff --git a/mm/lru_marie/Makefile b/mm/lru_marie/Makefile
@@ -25,37 +25,134 @@ index c1e9c9becfb3..94f673a950ef 100644
  obj-y	+= simd_generic.o
  endif
 diff --git a/mm/lru_marie/simd_x86.c b/mm/lru_marie/simd_x86.c
-index b119b6c26586..04c4e3db7b20 100644
+index 44ab48fa0b3f..bc961c84914e 100644
 --- a/mm/lru_marie/simd_x86.c
 +++ b/mm/lru_marie/simd_x86.c
-@@ -63,7 +63,9 @@ asmlinkage void lru_marie_simd_scan_sse2(const pte_t *pte_table,
+@@ -2,11 +2,12 @@
+ /*
+  * mm/lru_marie/simd_x86.c -- x86-64 PTE young-bit scan dispatch.
+  *
+- * Three SIMD .S kernels are linked in: lru_marie_simd_x86_{sse2,avx2,avx512}.S.
++ * Three SIMD .S kernels are linked in: lru_marie_simd_x86_{sse2,avx2,avx512,avx512_zen5}.S.
+  * arch_initcall picks the widest available at boot:
+- *   AVX-512F: 8 PTEs/iter via VPTESTMQ kmask
+- *   AVX2:     4 PTEs/iter via VPCMPEQQ
+- *   SSE2:     4 PTEs/iter via PSHUFD pack
++ *   AVX-512F+BW+BMI2:	16 PTEs/iter via 2x VPTESTMQ+HLXQ
++ *   AVX-512F: 	8 PTEs/iter via VPTESTMQ kmask
++ *   AVX2:     	4 PTEs/iter via VPCMPEQQ
++ *   SSE2:     	4 PTEs/iter via PSHUFD pack
+  *
+  * SSE2 is the floor -- x86-64 ABI-mandatory since 2003, always works,
+  * no cpu_has() check needed. It's the default initial value of the
+@@ -59,14 +60,16 @@
+ DEFINE_STATIC_KEY_TRUE(marie_simd_enabled_key);
+ EXPORT_SYMBOL_GPL(marie_simd_enabled_key);
+ 
+-/* Defined in mm/lru_marie/simd_x86_{sse2,avx2,avx512}.S.
++/* Defined in mm/lru_marie/simd_x86_{sse2,avx2,avx512,avx512_zen5}.S.
+  * Caller must hold kernel_fpu_begin/end. */
+ asmlinkage void lru_marie_simd_scan_sse2(const pte_t *pte_table,
+ 				   unsigned long *bitmap);
  asmlinkage void lru_marie_simd_scan_avx2(const pte_t *pte_table,
  				   unsigned long *bitmap);
  asmlinkage void lru_marie_simd_scan_avx512(const pte_t *pte_table,
 -				     unsigned long *bitmap);
-+				    unsigned long *bitmap);
++				   unsigned long *bitmap);
 +asmlinkage void lru_marie_simd_scan_avx512_zen5(const pte_t *pte_table,
-+					unsigned long *bitmap);
++				   unsigned long *bitmap);
  
  /* ------------------------------------------------------------------ */
  /* Scalar fallback                                                    */
-@@ -113,7 +115,12 @@ static int __init marie_simd_x86_init(void)
- 	 * via PSHUFD packing trick -- already the default before this
- 	 * runs, so we do nothing for the SSE2 case).
- 	 */
--	if (boot_cpu_has(X86_FEATURE_AVX512F)) {
+@@ -115,22 +118,31 @@ DEFINE_STATIC_CALL(marie_simd_scan, lru_marie_simd_scan_sse2);
+  * downclocking (NOT an issue on AMD Zen 4/5, which run AVX-512 at full clock).
+  * Orthogonal to the `simd` 0/1 master switch, which still forces pure scalar.
+  *
+- * Set at boot via `lru_marie.simd_max=avx512|avx2|sse2`, or at runtime via
++ * Set at boot via `lru_marie.simd_max=avx512_zen5|avx512|avx2|sse2`, or at runtime via
+  * /sys/kernel/mm/lru_marie/simd_max (re-patches the static call).
+  */
+ enum marie_simd_isa {
+ 	MARIE_SIMD_SSE2 = 0,
+ 	MARIE_SIMD_AVX2,
+ 	MARIE_SIMD_AVX512,
++	MARIE_SIMD_AVX512_ZEN5,
+ };
+-static enum marie_simd_isa marie_simd_max = MARIE_SIMD_AVX512;
++static enum marie_simd_isa marie_simd_max = MARIE_SIMD_AVX512_ZEN5;
+ 
+ /* Widest ISA the CPU supports, clamped to the marie_simd_max cap. */
+ static enum marie_simd_isa marie_simd_pick(void)
+ {
+ 	enum marie_simd_isa isa = MARIE_SIMD_SSE2;
+ 
+-	if (boot_cpu_has(X86_FEATURE_AVX512F))
++	/*
++	 * AVX-512F+BW+BMI2 (Zen 5) first — widest and highest priority.
++	 * Generic AVX-512F is the fallback if BW or BMI2 is absent.
++	 */
 +	if (boot_cpu_has(X86_FEATURE_AVX512F) &&
-+		boot_cpu_has(X86_FEATURE_AVX512BW) &&
-+		boot_cpu_has(X86_FEATURE_BMI2)) {
++	    boot_cpu_has(X86_FEATURE_AVX512BW) &&
++	    boot_cpu_has(X86_FEATURE_BMI2))
++		isa = MARIE_SIMD_AVX512_ZEN5;
++	else if (boot_cpu_has(X86_FEATURE_AVX512F))
+ 		isa = MARIE_SIMD_AVX512;
+ 	else if (boot_cpu_has(X86_FEATURE_AVX2))
+ 		isa = MARIE_SIMD_AVX2;
+@@ -142,6 +154,10 @@ static enum marie_simd_isa marie_simd_pick(void)
+ static void marie_simd_apply(void)
+ {
+ 	switch (marie_simd_pick()) {
++	case MARIE_SIMD_AVX512_ZEN5:
 +		static_call_update(marie_simd_scan, lru_marie_simd_scan_avx512_zen5);
 +		pr_info("SIMD PTE scan: AVX-512F+BW+BMI2 Zen5 (16 PTEs/iter)\n");
-+	} else if (boot_cpu_has(X86_FEATURE_AVX512F)) {
++		break;
+ 	case MARIE_SIMD_AVX512:
  		static_call_update(marie_simd_scan, lru_marie_simd_scan_avx512);
  		pr_info("SIMD PTE scan: AVX-512F (8 PTEs/iter)\n");
- 	} else if (boot_cpu_has(X86_FEATURE_AVX2)) {
+@@ -157,10 +173,12 @@ static void marie_simd_apply(void)
+ 	}
+ }
+ 
+-/* Boot param: lru_marie.simd_max=avx512|avx2|sse2 (read before arch_initcall). */
++/* Boot param: lru_marie.simd_max=avx512_zen5|avx512|avx2|sse2 (read before arch_initcall). */
+ static int __init marie_simd_max_setup(char *str)
+ {
+-	if (str && !strcmp(str, "avx512"))
++	if (str && !strcmp(str, "avx512_zen5"))
++		marie_simd_max = MARIE_SIMD_AVX512_ZEN5;
++	else if (str && !strcmp(str, "avx512"))
+ 		marie_simd_max = MARIE_SIMD_AVX512;
+ 	else if (str && !strcmp(str, "avx2"))
+ 		marie_simd_max = MARIE_SIMD_AVX2;
+@@ -207,9 +225,10 @@ arch_initcall(marie_simd_x86_init);
+ /* ---- simd_max sysfs accessors (used by mm/lru_marie/core.c) ---- */
+ 
+ static const char * const marie_simd_isa_names[] = {
+-	[MARIE_SIMD_SSE2]   = "sse2",
+-	[MARIE_SIMD_AVX2]   = "avx2",
+-	[MARIE_SIMD_AVX512] = "avx512",
++	[MARIE_SIMD_SSE2]        = "sse2",
++	[MARIE_SIMD_AVX2]        = "avx2",
++	[MARIE_SIMD_AVX512]      = "avx512",
++	[MARIE_SIMD_AVX512_ZEN5] = "avx512_zen5",
+ };
+ 
+ const char *marie_simd_max_name(void)
+@@ -221,7 +240,9 @@ int marie_simd_max_store(const char *buf)
+ {
+ 	enum marie_simd_isa v;
+ 
+-	if (sysfs_streq(buf, "avx512"))
++	if (sysfs_streq(buf, "avx512_zen5"))
++		v = MARIE_SIMD_AVX512_ZEN5;
++	else if (sysfs_streq(buf, "avx512"))
+ 		v = MARIE_SIMD_AVX512;
+ 	else if (sysfs_streq(buf, "avx2"))
+ 		v = MARIE_SIMD_AVX2;
 diff --git a/mm/lru_marie/simd_x86_avx512_zen5.S b/mm/lru_marie/simd_x86_avx512_zen5.S
 new file mode 100644
-index 000000000000..045268662795
+index 000000000000..391cc5a82d38
 --- /dev/null
 +++ b/mm/lru_marie/simd_x86_avx512_zen5.S
 @@ -0,0 +1,313 @@
@@ -66,7 +163,7 @@ index 000000000000..045268662795
 + * AVX-512F + AVX-512BW + BMI2 PTE young-bit scan for Marie walker.
 + * Optimised for CPUs with AVX-512F + AVX-512BW + BMI2 (e.g. AMD Zen 5).
 + *
-+ * Tested-by: Salman Wahib <sxlmnwb.dev@gmail.com>
++ * Author: Salman Wahib <sxlmnwb.dev@gmail.com>
 + *
 + * Processes 512 PTEs (one full PMD page table) per call, producing an
 + * 8-ulong (512-bit) young-bit bitmap.
