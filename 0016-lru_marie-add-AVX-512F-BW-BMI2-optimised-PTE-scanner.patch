@@ -1,4 +1,4 @@
-From f31375ea17dd569e5202ebc6cfb3add44ee3314e Mon Sep 17 00:00:00 2001
+From ca6bed3dd91fa1e80c01f4b51df40febbba9db81 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
 Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
@@ -38,10 +38,10 @@ index 44ab48fa0b3f..bc961c84914e 100644
 - *   AVX-512F: 8 PTEs/iter via VPTESTMQ kmask
 - *   AVX2:     4 PTEs/iter via VPCMPEQQ
 - *   SSE2:     4 PTEs/iter via PSHUFD pack
-+ *   AVX-512F+BW+BMI2:	16 PTEs/iter via 2x VPTESTMQ+HLXQ
-+ *   AVX-512F: 	8 PTEs/iter via VPTESTMQ kmask
-+ *   AVX2:     	4 PTEs/iter via VPCMPEQQ
-+ *   SSE2:     	4 PTEs/iter via PSHUFD pack
++ * 	 AVX-512F+BW+BMI2:	16 PTEs/iter via 2x VPTESTMQ+HLXQ
++ *   AVX-512F: 			8 PTEs/iter via VPTESTMQ kmask
++ *   AVX2:     			4 PTEs/iter via VPCMPEQQ
++ *   SSE2:     			4 PTEs/iter via PSHUFD pack
   *
   * SSE2 is the floor -- x86-64 ABI-mandatory since 2003, always works,
   * no cpu_has() check needed. It's the default initial value of the
