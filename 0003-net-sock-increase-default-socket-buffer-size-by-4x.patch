@@ -1,4 +1,4 @@
-From a9631b0cf15634dc6b2138a97ba61a7cab00b94e Mon Sep 17 00:00:00 2001
+From fcf255cf3c7ab75f9a6e987e0f5af7c278098909 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:48:34 +0700
 Subject: [PATCH 03/18] net/sock: increase default socket buffer size by 4x
@@ -23,5 +23,5 @@ index 95e157eee8d9..8dab3277d798 100644
  #define SK_WMEM_DEFAULT		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
  #define SK_RMEM_DEFAULT		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
 -- 
-2.54.0
+2.55.0
 

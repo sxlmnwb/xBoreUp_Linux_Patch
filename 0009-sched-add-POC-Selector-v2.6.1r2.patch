@@ -1,4 +1,4 @@
-From 2f055d8ed710a48f3e24e1fe91173201bbce7e35 Mon Sep 17 00:00:00 2001
+From 7925003f449fa75beb5eac569821f2540ddb33cc Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 11:45:54 +0900
 Subject: [PATCH 09/18] sched: add POC Selector v2.6.1r2
@@ -135,7 +135,7 @@ index 5d2d19473a82..9bb1a9746ad0 100644
  		sch->ops.name, scx_switched_all() ? "" : " (partial)");
  	kobject_uevent(&sch->kobj, KOBJ_ADD);
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index a8c1436e2811..6bf19d2e0153 100644
+index ed51ce22d26b..c2e41635bd38 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -49,6 +49,7 @@
@@ -146,7 +146,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  
  #include <asm/switch_to.h>
  
-@@ -1298,7 +1299,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
+@@ -1302,7 +1303,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
  
  #include "pelt.h"
  
@@ -155,7 +155,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  static unsigned long task_h_load(struct task_struct *p);
  static unsigned long capacity_of(int cpu);
  
-@@ -7933,6 +7934,20 @@ void __update_idle_core(struct rq *rq)
+@@ -7969,6 +7970,20 @@ void __update_idle_core(struct rq *rq)
  	rcu_read_unlock();
  }
  
@@ -176,7 +176,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  /*
   * Scan the entire LLC domain for idle cores; this dynamically switches off if
   * there are no idle cores left in the system; tracked through
-@@ -8001,6 +8016,11 @@ static inline bool test_idle_cores(int cpu)
+@@ -8037,6 +8052,11 @@ static inline bool test_idle_cores(int cpu)
  	return false;
  }
  
@@ -188,7 +188,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  static inline int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus, int *idle_cpu)
  {
  	return __select_idle_cpu(core, p);
-@@ -8155,16 +8175,38 @@ static inline bool asym_fits_cpu(unsigned long util,
+@@ -8191,16 +8211,38 @@ static inline bool asym_fits_cpu(unsigned long util,
  	return true;
  }
  
@@ -228,7 +228,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  	/*
  	 * On asymmetric system, update task utilization because we will check
  	 * that the task fits with CPU's capacity.
-@@ -8181,23 +8223,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8217,23 +8259,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	 */
  	lockdep_assert_irqs_disabled();
  
@@ -257,7 +257,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  
  	/*
  	 * Allow a per-cpu kthread to stack with the wakee if the
-@@ -8215,24 +8247,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8251,24 +8283,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  		return prev;
  	}
  
@@ -282,7 +282,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  	/*
  	 * For asymmetric CPU capacity systems, our domain of interest is
  	 * sd_asym_cpucapacity rather than sd_llc.
-@@ -8257,6 +8271,74 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8293,6 +8307,74 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	if (!sd)
  		return target;
  
@@ -357,7 +357,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  	if (sched_smt_active()) {
  		has_idle_core = test_idle_cores(target);
  
-@@ -8271,6 +8353,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8307,6 +8389,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	if ((unsigned)i < nr_cpumask_bits)
  		return i;
  
@@ -367,7 +367,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  	/*
  	 * For cluster machines which have lower sharing cache like L2 or
  	 * LLC Tag, we tend to find an idle CPU in the target's cluster
-@@ -8282,6 +8367,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
+@@ -8318,6 +8403,13 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
  	if ((unsigned int)recent_used_cpu < nr_cpumask_bits)
  		return recent_used_cpu;
  
@@ -381,7 +381,7 @@ index a8c1436e2811..6bf19d2e0153 100644
  	return target;
  }
  
-@@ -8957,7 +9049,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
+@@ -8993,7 +9085,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
  
  	/* Fast path */
  	if (wake_flags & WF_TTWU)
@@ -2612,5 +2612,5 @@ index 5847b83d9d55..b092e020cc32 100644
  			/*
  			 * In presence of higher domains, adjust the
 -- 
-2.54.0
+2.55.0
 

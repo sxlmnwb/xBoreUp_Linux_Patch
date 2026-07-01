@@ -1,4 +1,4 @@
-From a818e7ef8cba60facceddb9b9d3c80f387e3661e Mon Sep 17 00:00:00 2001
+From a66b2bb1f46ee779f750a6f6f9006fcf3d7df85b Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 19 Jun 2026 22:10:50 +0700
 Subject: [PATCH 05/18] mm: raise default max_map_count to INT_MAX
@@ -25,5 +25,5 @@ index fc2acedf0b76..97183d0f34b1 100644
  extern unsigned long sysctl_user_reserve_kbytes;
  extern unsigned long sysctl_admin_reserve_kbytes;
 -- 
-2.54.0
+2.55.0
 

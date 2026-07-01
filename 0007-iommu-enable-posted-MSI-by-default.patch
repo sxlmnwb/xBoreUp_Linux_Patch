@@ -1,4 +1,4 @@
-From a356bbfc820b6309b5eca5404dbbfad4c73074d4 Mon Sep 17 00:00:00 2001
+From f628e850b7dc3a733c4430dd5f8686f3b4d6978c Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:22:38 +0700
 Subject: [PATCH 07/18] iommu: enable posted MSI by default
@@ -25,5 +25,5 @@ index c2443659812a..0e71a648f403 100644
  static int disable_irq_remap;
  static struct irq_remap_ops *remap_ops;
 -- 
-2.54.0
+2.55.0
 

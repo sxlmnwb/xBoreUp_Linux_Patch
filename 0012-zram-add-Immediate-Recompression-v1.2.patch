@@ -1,4 +1,4 @@
-From 5ecc2c578911fab56b98b6cbc10c4802c5af9205 Mon Sep 17 00:00:00 2001
+From 47ea9479d5aeb7c7967a13aaadf9d5c86a2d3759 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Fri, 1 May 2026 14:21:27 +0900
 Subject: [PATCH 12/18] zram: add Immediate Recompression v1.2
@@ -191,5 +191,5 @@ index e11ee1ed3832..2271a6a15899 100644
  }
  
 -- 
-2.54.0
+2.55.0
 

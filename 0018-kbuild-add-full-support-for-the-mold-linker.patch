@@ -1,4 +1,4 @@
-From 4901b8d983a51e92d3370deaba601ee76a12c5c4 Mon Sep 17 00:00:00 2001
+From bb371f7afed585732065bb2ddf604cd50acff060 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 19 Jun 2026 23:44:34 +0700
 Subject: [PATCH 18/18] kbuild: add full support for the mold linker
@@ -271,5 +271,5 @@ index b9513d224476..d9003550bd72 100755
  	while [ $# -gt 1 -a "$1" != "LLD" ]; do
  		shift
 -- 
-2.54.0
+2.55.0
 

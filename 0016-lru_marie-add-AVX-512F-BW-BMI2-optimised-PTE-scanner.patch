@@ -1,4 +1,4 @@
-From ca6bed3dd91fa1e80c01f4b51df40febbba9db81 Mon Sep 17 00:00:00 2001
+From 41b5aaf055dd307272c7a5d19d8d94dc59338775 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
 Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
@@ -470,5 +470,5 @@ index 000000000000..391cc5a82d38
 +
 +SYM_FUNC_END(lru_marie_simd_scan_avx512_zen5)
 -- 
-2.54.0
+2.55.0
 

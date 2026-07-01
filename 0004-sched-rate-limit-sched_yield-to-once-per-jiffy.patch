@@ -1,4 +1,4 @@
-From 81646fa1ec1cc68ddc8b2abc135a897f5f05ffda Mon Sep 17 00:00:00 2001
+From d3cb3bed1090a427f79c44db3a17363c07c04457 Mon Sep 17 00:00:00 2001
 From: Colin Ian King <colin.i.king@intel.com>
 Date: Thu, 17 Oct 2024 16:29:50 +0100
 Subject: [PATCH 04/18] sched: rate-limit sched_yield to once per jiffy
@@ -39,5 +39,5 @@ index b215b0ead9a6..a47e70232d6d 100644
  	rq = this_rq_lock_irq(&rf);
  
 -- 
-2.54.0
+2.55.0
 

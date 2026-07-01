@@ -1,4 +1,4 @@
-From bb2457b8b875bb554441877bcea8976a2bc63d09 Mon Sep 17 00:00:00 2001
+From 490431e287a9ecab605a45ed76936dab02ce1dd0 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:38:34 +0700
 Subject: [PATCH 02/18] net/tcp: increase TCP write buffer limit from 4MB to
@@ -24,5 +24,5 @@ index 31e13af6f955..58e287c4cf19 100644
  
  	init_net.ipv4.sysctl_tcp_wmem[0] = PAGE_SIZE;
 -- 
-2.54.0
+2.55.0
 

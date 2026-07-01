@@ -1,4 +1,4 @@
-From b1dced5820cab82d8dd66845732f3a8125932121 Mon Sep 17 00:00:00 2001
+From 7242a28d0aa399034cbe71df89361c38273ccab7 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Fri, 1 May 2026 16:52:28 +0900
 Subject: [PATCH 14/18] cpufreq: add Reflex Governor v0.3.1
@@ -1400,5 +1400,5 @@ index cbbb87a0c6e7..8501657277bd 100644
  static void tick_nohz_account_idle_time(struct tick_sched *ts,
  					ktime_t now)
 -- 
-2.54.0
+2.55.0
 
