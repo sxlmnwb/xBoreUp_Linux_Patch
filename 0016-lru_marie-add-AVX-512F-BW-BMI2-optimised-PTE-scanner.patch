@@ -1,4 +1,4 @@
-From 41b5aaf055dd307272c7a5d19d8d94dc59338775 Mon Sep 17 00:00:00 2001
+From 5eccb689589ab3059d9678042382275cb600fb9e Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
 Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
@@ -13,10 +13,10 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  create mode 100644 mm/lru_marie/simd_x86_avx512_zen5.S
 
 diff --git a/mm/lru_marie/Makefile b/mm/lru_marie/Makefile
-index c1e9c9becfb3..94f673a950ef 100644
+index d01e2157adb5..6426fb62b10b 100644
 --- a/mm/lru_marie/Makefile
 +++ b/mm/lru_marie/Makefile
-@@ -14,6 +14,7 @@ obj-y	+= simd_x86.o
+@@ -16,6 +16,7 @@ obj-y	+= simd_x86.o
  obj-y	+= simd_x86_sse2.o
  obj-y	+= simd_x86_avx2.o
  obj-y	+= simd_x86_avx512.o

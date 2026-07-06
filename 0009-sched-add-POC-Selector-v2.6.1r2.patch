@@ -1,4 +1,4 @@
-From 7925003f449fa75beb5eac569821f2540ddb33cc Mon Sep 17 00:00:00 2001
+From 0490c81130af53f8822218f54ac665277865ee76 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sun, 17 May 2026 11:45:54 +0900
 Subject: [PATCH 09/18] sched: add POC Selector v2.6.1r2

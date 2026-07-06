@@ -1,4 +1,4 @@
-From bb371f7afed585732065bb2ddf604cd50acff060 Mon Sep 17 00:00:00 2001
+From aed3456e0077af9d7a862d2b606601963371d28c Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 19 Jun 2026 23:44:34 +0700
 Subject: [PATCH 18/18] kbuild: add full support for the mold linker
