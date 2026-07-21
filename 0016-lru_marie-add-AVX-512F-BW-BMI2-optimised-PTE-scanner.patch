@@ -1,4 +1,4 @@
-From d216706bf437b7a6d7fff151a290dda201a2670d Mon Sep 17 00:00:00 2001
+From 0a0b68c59438a511a20085acb0f7d3aad3e2726b Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
 Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
@@ -25,7 +25,7 @@ index d01e2157adb5..6426fb62b10b 100644
  obj-y	+= simd_generic.o
  endif
 diff --git a/mm/lru_marie/simd_x86.c b/mm/lru_marie/simd_x86.c
-index 44ab48fa0b3f..bc961c84914e 100644
+index 7f27ac7916c7..de097f889647 100644
 --- a/mm/lru_marie/simd_x86.c
 +++ b/mm/lru_marie/simd_x86.c
 @@ -2,11 +2,12 @@
@@ -45,7 +45,7 @@ index 44ab48fa0b3f..bc961c84914e 100644
   *
   * SSE2 is the floor -- x86-64 ABI-mandatory since 2003, always works,
   * no cpu_has() check needed. It's the default initial value of the
-@@ -59,14 +60,16 @@
+@@ -50,14 +51,16 @@
  DEFINE_STATIC_KEY_TRUE(marie_simd_enabled_key);
  EXPORT_SYMBOL_GPL(marie_simd_enabled_key);
  
@@ -64,7 +64,7 @@ index 44ab48fa0b3f..bc961c84914e 100644
  
  /* ------------------------------------------------------------------ */
  /* Scalar fallback                                                    */
-@@ -115,22 +118,31 @@ DEFINE_STATIC_CALL(marie_simd_scan, lru_marie_simd_scan_sse2);
+@@ -106,22 +109,31 @@ DEFINE_STATIC_CALL(marie_simd_scan, lru_marie_simd_scan_sse2);
   * downclocking (NOT an issue on AMD Zen 4/5, which run AVX-512 at full clock).
   * Orthogonal to the `simd` 0/1 master switch, which still forces pure scalar.
   *
@@ -99,7 +99,7 @@ index 44ab48fa0b3f..bc961c84914e 100644
  		isa = MARIE_SIMD_AVX512;
  	else if (boot_cpu_has(X86_FEATURE_AVX2))
  		isa = MARIE_SIMD_AVX2;
-@@ -142,6 +154,10 @@ static enum marie_simd_isa marie_simd_pick(void)
+@@ -133,6 +145,10 @@ static enum marie_simd_isa marie_simd_pick(void)
  static void marie_simd_apply(void)
  {
  	switch (marie_simd_pick()) {
@@ -110,7 +110,7 @@ index 44ab48fa0b3f..bc961c84914e 100644
  	case MARIE_SIMD_AVX512:
  		static_call_update(marie_simd_scan, lru_marie_simd_scan_avx512);
  		pr_info("SIMD PTE scan: AVX-512F (8 PTEs/iter)\n");
-@@ -157,10 +173,12 @@ static void marie_simd_apply(void)
+@@ -148,10 +164,12 @@ static void marie_simd_apply(void)
  	}
  }
  
@@ -125,7 +125,7 @@ index 44ab48fa0b3f..bc961c84914e 100644
  		marie_simd_max = MARIE_SIMD_AVX512;
  	else if (str && !strcmp(str, "avx2"))
  		marie_simd_max = MARIE_SIMD_AVX2;
-@@ -207,9 +225,10 @@ arch_initcall(marie_simd_x86_init);
+@@ -198,9 +216,10 @@ arch_initcall(marie_simd_x86_init);
  /* ---- simd_max sysfs accessors (used by mm/lru_marie/core.c) ---- */
  
  static const char * const marie_simd_isa_names[] = {
@@ -139,7 +139,7 @@ index 44ab48fa0b3f..bc961c84914e 100644
  };
  
  const char *marie_simd_max_name(void)
-@@ -221,7 +240,9 @@ int marie_simd_max_store(const char *buf)
+@@ -212,7 +231,9 @@ int marie_simd_max_store(const char *buf)
  {
  	enum marie_simd_isa v;
  

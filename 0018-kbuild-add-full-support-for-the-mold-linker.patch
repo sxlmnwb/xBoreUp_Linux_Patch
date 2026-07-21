@@ -1,4 +1,4 @@
-From a0eacc025627a353b4ec02783e5577228d4d5560 Mon Sep 17 00:00:00 2001
+From 565f10850123e9abc7e8fc9a57b0cbc5e5623c80 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 19 Jun 2026 23:44:34 +0700
 Subject: [PATCH 18/18] kbuild: add full support for the mold linker
@@ -207,7 +207,7 @@ index c5754942cf85..6579d0e525bf 100644
  
  config RISCV_ISA_ZBKB
 diff --git a/init/Kconfig b/init/Kconfig
-index 4d25b0f06620..a122fe3654b3 100644
+index ffa9edcff7cf..b5a9c9262ecf 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -53,11 +53,19 @@ config LD_VERSION

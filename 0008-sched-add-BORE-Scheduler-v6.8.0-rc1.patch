@@ -1,4 +1,4 @@
-From 32e88f3f9e1dc2b07cccae29f688ed2e7b9711da Mon Sep 17 00:00:00 2001
+From 788ae2a51258378130ea9c4164825cf156500652 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Sat, 27 Jun 2026 08:34:51 +0900
 Subject: [PATCH 08/18] sched: add BORE Scheduler v6.8.0-rc1
@@ -134,7 +134,7 @@ index 000000000000..76afe1d250d9
 +
 +#endif /* _KERNEL_SCHED_BORE_H */
 diff --git a/init/Kconfig b/init/Kconfig
-index 2937c4d308ae..8cda3ddb30d0 100644
+index 826a7d768ca3..fc799fca9cbc 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -1466,6 +1466,23 @@ config CHECKPOINT_RESTORE

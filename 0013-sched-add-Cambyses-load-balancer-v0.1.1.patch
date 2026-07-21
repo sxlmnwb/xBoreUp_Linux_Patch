@@ -1,4 +1,4 @@
-From 58ccd04752fc6286fcc78bc6aaeb4e0e1f51391a Mon Sep 17 00:00:00 2001
+From 9abf8fd14766b7b33eabc75e3e500638c3bebde5 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Thu, 23 Apr 2026 18:49:53 +0700
 Subject: [PATCH 13/18] sched: add Cambyses load balancer v0.1.1
@@ -30,7 +30,7 @@ Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
  create mode 100644 kernel/sched/cambyses_sort.c
 
 diff --git a/init/Kconfig b/init/Kconfig
-index a34ddc3f6ad4..4d25b0f06620 100644
+index 2b0da4555fbc..ffa9edcff7cf 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -1483,6 +1483,41 @@ config SCHED_BORE
