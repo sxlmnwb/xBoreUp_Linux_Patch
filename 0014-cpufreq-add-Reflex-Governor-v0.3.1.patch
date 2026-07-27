@@ -1,4 +1,4 @@
-From 23971f48afc14da64818310a7c7ed2d9e64798a8 Mon Sep 17 00:00:00 2001
+From a1b6ec298d464d12a51b2f0e73bc51c922c6a684 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Fri, 1 May 2026 16:52:28 +0900
 Subject: [PATCH 14/18] cpufreq: add Reflex Governor v0.3.1
@@ -1304,10 +1304,10 @@ index 742fb9e62e1a..5abbe2f17b72 100644
  }
 +EXPORT_SYMBOL_GPL(cpufreq_this_cpu_can_update);
 diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
-index ae9fd211cec1..a1d66273cf32 100644
+index a4e689eefdfb..ac5455e8638f 100644
 --- a/kernel/sched/cpufreq_schedutil.c
 +++ b/kernel/sched/cpufreq_schedutil.c
-@@ -936,3 +936,79 @@ bool sugov_is_governor(struct cpufreq_policy *policy)
+@@ -937,3 +937,79 @@ bool sugov_is_governor(struct cpufreq_policy *policy)
  }
  
  cpufreq_governor_init(schedutil_gov);
@@ -1388,10 +1388,10 @@ index ae9fd211cec1..a1d66273cf32 100644
 +}
 +EXPORT_SYMBOL_GPL(cpufreq_scx_switched_all);
 diff --git a/kernel/time/tick-sched.c b/kernel/time/tick-sched.c
-index cbbb87a0c6e7..8501657277bd 100644
+index 171393367b5c..aacbe96d1242 100644
 --- a/kernel/time/tick-sched.c
 +++ b/kernel/time/tick-sched.c
-@@ -1428,6 +1428,7 @@ unsigned long tick_nohz_get_idle_calls_cpu(int cpu)
+@@ -1429,6 +1429,7 @@ unsigned long tick_nohz_get_idle_calls_cpu(int cpu)
  
  	return ts->idle_calls;
  }
