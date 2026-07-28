@@ -1,4 +1,4 @@
-From 565747e27032bf212a1a5ef095b532c0c9b339e6 Mon Sep 17 00:00:00 2001
+From 64d5b49ef7a4a627528132dc6a235b095c05be2c Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
 Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner

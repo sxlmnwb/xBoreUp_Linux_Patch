@@ -1,4 +1,4 @@
-From 602587ed74e2440bc4428147e42843df0745b780 Mon Sep 17 00:00:00 2001
+From 3f4a5968f142789f51df1377ab75566a58d8696e Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 19 Jun 2026 23:44:34 +0700
 Subject: [PATCH 18/18] kbuild: add full support for the mold linker
@@ -207,7 +207,7 @@ index c5754942cf85..6579d0e525bf 100644
  
  config RISCV_ISA_ZBKB
 diff --git a/init/Kconfig b/init/Kconfig
-index ffa9edcff7cf..b5a9c9262ecf 100644
+index 2b0da4555fbc..1090251d8267 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
 @@ -53,11 +53,19 @@ config LD_VERSION
@@ -242,7 +242,7 @@ index ffa9edcff7cf..b5a9c9262ecf 100644
  
  config RUSTC_HAS_SPAN_FILE
  	def_bool RUSTC_VERSION >= 108800
-@@ -1706,8 +1715,9 @@ config LD_DEAD_CODE_DATA_ELIMINATION
+@@ -1671,8 +1680,9 @@ config LD_DEAD_CODE_DATA_ELIMINATION
  config LD_ORPHAN_WARN
  	def_bool y
  	depends on ARCH_WANT_LD_ORPHAN_WARN
