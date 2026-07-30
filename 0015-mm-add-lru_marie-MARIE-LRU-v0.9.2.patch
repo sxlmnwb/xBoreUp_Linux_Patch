@@ -1,7 +1,7 @@
-From 4ca59451f915054b50380d5b8c331092fe37d33a Mon Sep 17 00:00:00 2001
+From 637013eefb086349010c475ab0409dd2a81f8995 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
-Date: Tue, 28 Jul 2026 04:32:09 +0900
-Subject: [PATCH 15/18] mm: add lru_marie MARIE LRU v0.9.1
+Date: Thu, 30 Jul 2026 02:15:44 +0900
+Subject: [PATCH 15/18] mm: add lru_marie MARIE LRU v0.9.2
 
 Memory-Aware Reclaim with Intelligent Eviction.
 Replaces le9uo working set protection and Re-swappiness,
@@ -10,7 +10,10 @@ LRU reclaim subsystem featuring smarter page eviction, async swap
 compression via kcompmari, and hardware-accelerated PTE scanning (SSE2/AVX2/AVX-512/NEON).
 
 Source: https://github.com/firelzrd/lru_marie
-Patch: 0001-linux7.1-rc5-lru_marie-0.9.1.patch
+Patch: 0001-linux7.1-rc5-lru_marie-0.9.2.patch
+
+Co-authored-by: Masahito S <firelzrd@gmail.com>
+Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
 ---
  include/linux/lru_marie.h      |  498 +++++
  include/linux/memcontrol.h     |   26 +-
@@ -26,8 +29,8 @@ Patch: 0001-linux7.1-rc5-lru_marie-0.9.1.patch
  mm/lru_marie/account.h         |  106 ++
  mm/lru_marie/bitmap.c          |  118 ++
  mm/lru_marie/bitmap.h          |  221 +++
- mm/lru_marie/core.c            | 1201 +++++++++++++
- mm/lru_marie/defrag.c          | 1199 +++++++++++++
+ mm/lru_marie/core.c            | 1201 ++++++++++++
+ mm/lru_marie/defrag.c          | 1199 ++++++++++++
  mm/lru_marie/defrag.h          |   85 +
  mm/lru_marie/defrag_compat.h   |   53 +
  mm/lru_marie/pfn_install.h     |  139 ++
@@ -38,7 +41,7 @@ Patch: 0001-linux7.1-rc5-lru_marie-0.9.1.patch
  mm/lru_marie/simd_x86_avx2.S   |  170 ++
  mm/lru_marie/simd_x86_avx512.S |  220 +++
  mm/lru_marie/simd_x86_sse2.S   |  158 ++
- mm/lru_marie/state.c           | 3095 ++++++++++++++++++++++++++++++++
+ mm/lru_marie/state.c           | 3112 ++++++++++++++++++++++++++++++++
  mm/lru_marie/state.h           |  987 ++++++++++
  mm/lru_marie/state_compat.h    |   94 +
  mm/lru_marie/version.h         |   22 +
@@ -54,7 +57,7 @@ Patch: 0001-linux7.1-rc5-lru_marie-0.9.1.patch
  mm/swap.c                      |  248 ++-
  mm/swap.h                      |    4 +
  mm/vmscan.c                    |  341 +++-
- 42 files changed, 11607 insertions(+), 28 deletions(-)
+ 42 files changed, 11624 insertions(+), 28 deletions(-)
  create mode 100644 include/linux/lru_marie.h
  create mode 100644 mm/lru_marie/Makefile
  create mode 100644 mm/lru_marie/account.h
@@ -5432,10 +5435,10 @@ index 000000000000..b86381ab5f8b
 +SYM_FUNC_END(lru_marie_simd_scan_sse2)
 diff --git a/mm/lru_marie/state.c b/mm/lru_marie/state.c
 new file mode 100644
-index 000000000000..d51364efe041
+index 000000000000..d59d0b5fae8c
 --- /dev/null
 +++ b/mm/lru_marie/state.c
-@@ -0,0 +1,3095 @@
+@@ -0,0 +1,3112 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Marie per-PFN state array — allocation, init, and global counters.
@@ -7490,17 +7493,34 @@ index 000000000000..d51364efe041
 +			 * inactive list holds, wait for them to catch up
 +			 * instead of piling more folios into flight on top.
 +			 * One retry (mirrors shrink_inactive_list's
-+			 * `stalled` bool) -- if it is still too many after
-+			 * one wait, proceed anyway rather than loop forever;
-+			 * a persistent count of "OK, isolated is high" is a
-+			 * separate, worse problem no amount of waiting here
-+			 * fixes. kswapd never blocks here (see
++			 * `stalled` bool) -- but unlike an earlier version of
++			 * this check, if it is STILL too many after that one
++			 * wait, give up on this type for the rest of the
++			 * sweep (drop to the per-type tail, same as the
++			 * skip_file/ring-empty `break` above) rather than
++			 * isolating another batch_max-sized batch (up to
++			 * MARIE_PFN_SHRINK_BATCH pages) regardless.
++			 * batch_max scales up to 256x SWAP_CLUSTER_MAX under
++			 * heavy pressure, so "proceed anyway" lets every
++			 * stalled reclaimer pile a full batch on top of an
++			 * already-excessive isolated count instead of
++			 * bailing out the way shrink_inactive_list's
++			 * `stalled` path does (it returns 0 rather than
++			 * isolating unconditionally). That mismatch is what
++			 * let isolated_anon balloon into the tens-of-GB range
++			 * (GitHub issue #6) even after the batch was already
++			 * page-budget-capped: each concurrent reclaimer got
++			 * one grace wait, then isolated up to its full batch
++			 * regardless of whether the pileup had cleared.
++			 * kswapd never blocks here (see
 +			 * marie_too_many_isolated).
 +			 */
 +			if (unlikely(marie_too_many_isolated(pgdat, type, sc))) {
 +				reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
 +				if (fatal_signal_pending(current))
 +					goto done;
++				if (unlikely(marie_too_many_isolated(pgdat, type, sc)))
++					break;
 +			}
 +
 +			/*
@@ -9626,7 +9646,7 @@ index 000000000000..4d07cedd9c17
 +#endif /* _MM_LRU_MARIE_STATE_COMPAT_H */
 diff --git a/mm/lru_marie/version.h b/mm/lru_marie/version.h
 new file mode 100644
-index 000000000000..97dbf2fa5153
+index 000000000000..7d3631898e2e
 --- /dev/null
 +++ b/mm/lru_marie/version.h
 @@ -0,0 +1,22 @@
@@ -9649,7 +9669,7 @@ index 000000000000..97dbf2fa5153
 +#define MARIE_PROGNAME	"Marie LRU"
 +#define MARIE_AUTHOR	"Masahito Suzuki"
 +
-+#define MARIE_VERSION	"0.9.1"
++#define MARIE_VERSION	"0.9.2"
 +
 +#endif /* _MM_LRU_MARIE_VERSION_H */
 diff --git a/mm/lru_marie/walker.c b/mm/lru_marie/walker.c
