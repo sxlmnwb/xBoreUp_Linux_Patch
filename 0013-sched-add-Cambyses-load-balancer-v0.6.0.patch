@@ -1,7 +1,7 @@
-From 483608830c637ffa06d60e7b921fbfbfb2d77043 Mon Sep 17 00:00:00 2001
+From 63e8a34fc6030de28abf922a37c336023f823e81 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Mon, 27 Jul 2026 21:34:28 +0900
-Subject: [PATCH 13/18] sched: add Cambyses load balancer v0.6.0
+Subject: [PATCH 13/17] sched: add Cambyses load balancer v0.6.0
 
 Two sched_feat()-gated tweaks to CFS's detach_tasks():
 

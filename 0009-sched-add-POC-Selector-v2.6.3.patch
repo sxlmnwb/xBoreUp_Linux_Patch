@@ -1,7 +1,7 @@
-From f29978fa9b461462156f2e0411e5777d3e5b96fa Mon Sep 17 00:00:00 2001
+From 7adb94cf3f1e93bb2769a213a76572c55139b7fe Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Wed, 29 Jul 2026 02:52:30 +0900
-Subject: [PATCH 09/18] sched: add POC Selector v2.6.3
+Subject: [PATCH 09/17] sched: add POC Selector v2.6.3
 
 Piece-Of-Cake (POC) O(1) Idle CPU Selector for select_idle_cpu() hot path.
 Uses per-LLC atomic64_t bitmaps with lock-free reads for O(1) idle CPU discovery,
@@ -86,10 +86,10 @@ index 36553e14866d..35c9c37a04c8 100644
  
  struct sched_domain {
 diff --git a/init/Kconfig b/init/Kconfig
-index fc799fca9cbc..2b0da4555fbc 100644
+index be76d8980112..30b006cfe346 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
-@@ -1495,6 +1495,19 @@ config SCHED_AUTOGROUP
+@@ -1498,6 +1498,19 @@ config SCHED_AUTOGROUP
  	  desktop applications.  Task group autogeneration is currently based
  	  upon task session.
  
@@ -110,10 +110,10 @@ index fc799fca9cbc..2b0da4555fbc 100644
  	bool "Kernel->user space relay support (formerly relayfs)"
  	select IRQ_WORK
 diff --git a/kernel/sched/ext.c b/kernel/sched/ext.c
-index 5d2d19473a82..9bb1a9746ad0 100644
+index 5c780756e362..5c407948672c 100644
 --- a/kernel/sched/ext.c
 +++ b/kernel/sched/ext.c
-@@ -6041,6 +6041,9 @@ static void scx_root_disable(struct scx_sched *sch)
+@@ -6059,6 +6059,9 @@ static void scx_root_disable(struct scx_sched *sch)
  	mutex_unlock(&scx_enable_mutex);
  
  	WARN_ON_ONCE(scx_set_enable_state(SCX_DISABLED) != SCX_DISABLING);
@@ -123,7 +123,7 @@ index 5d2d19473a82..9bb1a9746ad0 100644
  done:
  	scx_bypass(sch, false);
  }
-@@ -7073,6 +7076,10 @@ static void scx_root_enable_workfn(struct kthread_work *work)
+@@ -7091,6 +7094,10 @@ static void scx_root_enable_workfn(struct kthread_work *work)
  	if (!(ops->flags & SCX_OPS_SWITCH_PARTIAL))
  		static_branch_enable(&__scx_switched_all);
  

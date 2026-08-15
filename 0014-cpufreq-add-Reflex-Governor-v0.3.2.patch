@@ -1,7 +1,7 @@
-From 442e2fbf6634128d7356bab70c27b4774f4aeb1a Mon Sep 17 00:00:00 2001
+From 6ff06fb5c3210e124262a8405793aaf3646bb1d6 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Tue, 28 Jul 2026 02:30:19 +0900
-Subject: [PATCH 14/18] cpufreq: add Reflex Governor v0.3.2
+Subject: [PATCH 14/17] cpufreq: add Reflex Governor v0.3.2
 
 Interactive + schedutil hybrid CPUFreq governor. Combines instant high-speed frequency
 jumps on idle-to-busy transitions with PELT-proportional scaling for
@@ -99,7 +99,7 @@ index 385c9fcc65c6..4e369f8eb7bb 100644
  obj-$(CONFIG_CPUFREQ_DT)		+= cpufreq-dt.o
  obj-$(CONFIG_CPUFREQ_DT_RUST)		+= rcpufreq_dt.o
 diff --git a/drivers/cpufreq/cpufreq.c b/drivers/cpufreq/cpufreq.c
-index d41067cd1f1b..03aee1b053c5 100644
+index 2debe39fc477..1e18df8f56a0 100644
 --- a/drivers/cpufreq/cpufreq.c
 +++ b/drivers/cpufreq/cpufreq.c
 @@ -2046,6 +2046,7 @@ bool cpufreq_driver_test_flags(u16 flags)
@@ -1317,10 +1317,10 @@ index 742fb9e62e1a..5abbe2f17b72 100644
  }
 +EXPORT_SYMBOL_GPL(cpufreq_this_cpu_can_update);
 diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
-index a4e689eefdfb..ac5455e8638f 100644
+index dff4ee04694c..9caf75c71dfa 100644
 --- a/kernel/sched/cpufreq_schedutil.c
 +++ b/kernel/sched/cpufreq_schedutil.c
-@@ -937,3 +937,79 @@ bool sugov_is_governor(struct cpufreq_policy *policy)
+@@ -948,3 +948,79 @@ bool sugov_is_governor(struct cpufreq_policy *policy)
  }
  
  cpufreq_governor_init(schedutil_gov);

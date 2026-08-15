@@ -1,7 +1,7 @@
-From 536cc3baebe6d18022cd1cf9a6238eec69053afb Mon Sep 17 00:00:00 2001
+From f305821d643e5552c12d0d8698395d06c5d54686 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:38:34 +0700
-Subject: [PATCH 02/18] net/tcp: increase TCP write buffer limit from 4MB to
+Subject: [PATCH 02/17] net/tcp: increase TCP write buffer limit from 4MB to
  16MB
 
 Co-authored-by: Arjan van de Ven <arjan@linux.intel.com>

@@ -50,7 +50,6 @@ A curated collection of performance and responsiveness patches for Linux `linux-
 | # | Patch | Description |
 |---|-------|-------------|
 | 0017 | `scripts: setlocalversion remove tag for git repo` | Cleaner kernel version string |
-| 0018 | `kbuild: add full support for the mold linker` | Use `mold` as the kernel linker for faster build times (experimental always use LLD) |
 
 ---
 

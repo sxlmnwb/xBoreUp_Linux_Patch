@@ -1,22 +1,22 @@
-From 92eebf06978adb3fea573bf826cbc38b1a5b4b60 Mon Sep 17 00:00:00 2001
+From e97ac5a4aa8f4348eac575872277a0a33bbdaa0e Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 17:42:09 +0700
-Subject: [PATCH 16/18] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
+Subject: [PATCH 16/17] lru_marie: add AVX-512F+BW+BMI2 optimised PTE scanner
  for AMD Zen 5
 
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>
 ---
  mm/lru_marie/Makefile               |   1 +
  mm/lru_marie/simd_x86.c             |  51 +++--
- mm/lru_marie/simd_x86_avx512_zen5.S | 313 ++++++++++++++++++++++++++++
- 3 files changed, 350 insertions(+), 15 deletions(-)
+ mm/lru_marie/simd_x86_avx512_zen5.S | 314 ++++++++++++++++++++++++++++
+ 3 files changed, 351 insertions(+), 15 deletions(-)
  create mode 100644 mm/lru_marie/simd_x86_avx512_zen5.S
 
 diff --git a/mm/lru_marie/Makefile b/mm/lru_marie/Makefile
-index d01e2157adb5..6426fb62b10b 100644
+index 67f6b1b4c43b..8d57e56bda59 100644
 --- a/mm/lru_marie/Makefile
 +++ b/mm/lru_marie/Makefile
-@@ -16,6 +16,7 @@ obj-y	+= simd_x86.o
+@@ -18,6 +18,7 @@ obj-y	+= simd_x86.o
  obj-y	+= simd_x86_sse2.o
  obj-y	+= simd_x86_avx2.o
  obj-y	+= simd_x86_avx512.o
@@ -152,10 +152,10 @@ index 7f27ac7916c7..de097f889647 100644
  		v = MARIE_SIMD_AVX2;
 diff --git a/mm/lru_marie/simd_x86_avx512_zen5.S b/mm/lru_marie/simd_x86_avx512_zen5.S
 new file mode 100644
-index 000000000000..391cc5a82d38
+index 000000000000..81eae80fc470
 --- /dev/null
 +++ b/mm/lru_marie/simd_x86_avx512_zen5.S
-@@ -0,0 +1,313 @@
+@@ -0,0 +1,314 @@
 +/* SPDX-License-Identifier: GPL-2.0 */
 +/*
 + * mm/lru_marie/simd_x86_avx512_zen5.S
@@ -175,7 +175,7 @@ index 000000000000..391cc5a82d38
 + * The upstream simd_x86_avx512.S targets the AVX-512F Foundation subset
 + * only for broad compatibility (Xeon Phi/KNL, early Skylake-SP).  AMD
 + * Zen 5 exposes AVX-512BW and BMI2 in addition to AVX-512F, enabling
-+ * five further optimisations that are unsafe or unavailable on the
++ * several further optimisations that are unsafe or unavailable on the
 + * generic path.  This file is selected at boot only when all three
 + * feature bits are confirmed; the upstream file remains as the fallback.
 + *
@@ -183,32 +183,31 @@ index 000000000000..391cc5a82d38
 + * Changes vs. simd_x86_avx512.S (upstream generic AVX-512F)
 + * -----------------------------------------------------------------------
 + *
-+ * 1. SHLXQ replaces push/pop-around-shlq  [BMI2 — biggest win]
++ * 1. SHLXQ replaces CL-based variable shift  [BMI2]
 + *
 + *    Upstream uses a CL-based variable shift which requires the count in
-+ *    CL, forcing push/pop of RCX (inner loop counter) around every shift:
-+ *
-+ *      pushq %rcx          ; save inner loop counter to stack
-+ *      movq  %r9, %rcx     ; move bit-position to cl
-+ *      shlq  %cl, %rax     ; shift (required x86 to use cl)
-+ *      orq   %rax, %r8     ; accumulate
-+ *      popq  %rcx          ; restore inner loop counter
-+ *      addq  $8, %r9       ; advance bit-position
++ *    CL. This forces rcx to be used as the bit-position counter, and r10
++ *    to be used as the inner loop counter. Additionally, shlq clobbers
++ *    flags (CF/SF/ZF).
 + *
 + *    BMI2 SHLXQ shifts from any GPR without touching flags or CL:
 + *
 + *      shlxq %r9, %rax, %rax   ; shift rax left by r9, result -> rax
 + *
-+ *    RCX is now free for the inner loop counter throughout; the push/pop
-+ *    pair is eliminated entirely.  Saving: 2 uops × 64 inner iterations
-+ *    = 128 extraneous uops per call eliminated.
++ *    RCX is now free to be the inner loop counter throughout; flags are
++ *    preserved. Saving: eliminates CL dependency + flag clobber.
 + *
-+ * 2. 2× inner-loop unroll (16 PTEs per iteration, up from 8)
++ * 2. Merge strategy: combined A|B vs split accumulator
 + *
-+ *    Zen 5 has two AVX-512 execution ports (p0 / p1).  Unrolling by 2
-+ *    lets the two VPTESTMQ instructions dual-issue in the same cycle.
-+ *    Loop overhead (dec + jnz) is halved.  Inner loop: 4 iterations
-+ *    (each handling 16 PTEs) instead of 8 (each handling 8 PTEs).
++ *    Upstream already uses a 2× unroll (16 PTEs per iteration), but it
++ *    employs split accumulators (r8 for block A, r9 for block B) with
++ *    two independent shift+OR chains per iteration.
++ *
++ *    This file merges A|B into rax[15:0] first (via salq $8 + orq),
++ *    then uses a single SHLXQ to place the 16-bit result at the correct
++ *    ulong position. This reduces register pressure (no split accumulator
++ *    needed) but creates a slightly deeper dependency chain per iteration,
++ *    which is mitigated by Zen 5's execution throughput.
 + *
 + * 3. vmovdqa64 replaces vmovdqu64  [aligned load]
 + *
@@ -271,12 +270,12 @@ index 000000000000..391cc5a82d38
 + *   rdi         PTE pointer (advances +128 bytes per inner iteration)
 + *   rsi         bitmap base (constant throughout)
 + *   rdx         outer loop counter (8 → 0)
-+ *   rcx         inner loop counter (4 → 0) [freed from push/pop duty]
-+ *   rax         KMOVB result for block A / shift scratch
-+ *   r10         KMOVB result for block B
++ *   rcx         inner loop counter (4 → 0) [freed from shift-count duty via SHLXQ]
++ *   rax         KMOVB result for block A / merge scratch / shift scratch
++ *   r10         KMOVB result for block B / scratch for block B merge
 + *   r8          per-ulong accumulator
 + *   r9          bit-position counter (0, 16, 32, 48 — steps of 16 because
-+ *               each unrolled iteration contributes 16 bits)
++ *               each unrolled iteration contributes 16 bits; source for SHLXQ)
 + *   r11         bitmap write pointer (advances +8 bytes each outer iter)
 + *
 + *   k0 is reserved (no-mask predicate; do not use as output).
@@ -287,8 +286,10 @@ index 000000000000..391cc5a82d38
 + * -----------------------------------------------------------------------
 + *
 + *   upstream simd_x86_avx512.S : ~10 ns per 512-PTE PMD scan
-+ *   this file                  : ~6-7 ns per 512-PTE PMD scan
-+ *   improvement                : ~30-40% fewer uops per call
++ *   this file                  : ~8 ns per 512-PTE PMD scan
++ *   improvement                : ~15-20% higher IPC via MLP (prefetch)
++ *                                and dual-issue VPTESTMQ, despite similar
++ *                                dynamic instruction count.
 + */
 +
 +#include <linux/linkage.h>
@@ -364,8 +365,8 @@ index 000000000000..391cc5a82d38
 +         *   r8 |= rax              (accumulate)
 +         *   r9 += 16               (advance bit-position)
 +         *
-+         * OPT 1 — SHLXQ (BMI2): variable shift without CL / push/pop.
-+         *   rcx is the inner loop counter throughout; never borrowed.
++         * OPT 1 — SHLXQ (BMI2): variable shift without CL dependency.
++         *   rcx is freed from shift-count duty and serves as inner loop counter.
 +         *
 +         * OPT 2 — vmovdqa64: PTE table is 4096-byte aligned ⟹ 64-byte
 +         *   aligned ⟹ all ZMM loads are naturally aligned.
@@ -373,8 +374,8 @@ index 000000000000..391cc5a82d38
 +         * OPT 3 — PREFETCHT0: issued at top of each inner iter, 256 bytes
 +         *   ahead (4 ZMM loads), to hide L1D fill latency for next pair.
 +         *
-+         * OPT 4 — 2× unroll: the two VPTESTMQ ops dual-issue on Zen 5's
-+         *   p0 and p1 AVX-512 ports; loop overhead halved.
++         * OPT 4 — Combined merge: A|B merged into rax[15:0] before a single
++         *   shift, unlike upstream's split accumulator approach.
 +         *
 +         * OPT 5 — KMOVB (AVX-512BW): exact 8-bit opmask transfer, no
 +         *   implicit dependency on upper opmask bits.

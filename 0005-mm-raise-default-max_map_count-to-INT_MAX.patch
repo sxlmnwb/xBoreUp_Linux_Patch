@@ -1,7 +1,7 @@
-From 851e838f19108be03e111130bd30da516b1728d1 Mon Sep 17 00:00:00 2001
+From 5b3781312998a4f97dafcc970fb7bf2bf7182ffc Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Fri, 19 Jun 2026 22:10:50 +0700
-Subject: [PATCH 05/18] mm: raise default max_map_count to INT_MAX
+Subject: [PATCH 05/17] mm: raise default max_map_count to INT_MAX
 
 - prevents game crashes from VMA exhaustion
 

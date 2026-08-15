@@ -1,7 +1,7 @@
-From 000f44d360fd93f03382ff85ea51fb5df760eed6 Mon Sep 17 00:00:00 2001
+From dbeef14fd0854b84456ea879778fe9036d7b918a Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:48:34 +0700
-Subject: [PATCH 03/18] net/sock: increase default socket buffer size by 4x
+Subject: [PATCH 03/17] net/sock: increase default socket buffer size by 4x
 
 Co-authored-by: Colin Ian King <colin.i.king@intel.com>
 Signed-off-by: Salman Wahib <sxlmnwb.dev@gmail.com>

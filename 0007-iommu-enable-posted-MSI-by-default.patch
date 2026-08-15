@@ -1,7 +1,7 @@
-From 5762a99e50d7108254e307dd0c9b447fde9a9264 Mon Sep 17 00:00:00 2001
+From d19cf710accc71de330e94d4835190363c8408f0 Mon Sep 17 00:00:00 2001
 From: Salman Wahib <sxlmnwb.dev@gmail.com>
 Date: Tue, 26 May 2026 16:22:38 +0700
-Subject: [PATCH 07/18] iommu: enable posted MSI by default
+Subject: [PATCH 07/17] iommu: enable posted MSI by default
 
 - lower PCIe interrupt latency for GPU
 

@@ -1,7 +1,7 @@
-From d9ff3f87cda1e6531e6ff4205951ad7158c8f028 Mon Sep 17 00:00:00 2001
+From 27b294a84c4ead52831f7f3ccde0c931b3daaff1 Mon Sep 17 00:00:00 2001
 From: Masahito S <firelzrd@gmail.com>
 Date: Tue, 28 Jul 2026 23:17:12 +0900
-Subject: [PATCH 08/18] sched: add BORE Scheduler v6.8.0
+Subject: [PATCH 08/17] sched: add BORE Scheduler v6.8.0
 
 Burst-Oriented Response Enhancer (BORE) scheduler improves interactivity
 by tracking burst behavior per-task and adjusting vruntime penalties accordingly.
@@ -132,10 +132,10 @@ index 000000000000..e7469c515e57
 +
 +#endif /* _KERNEL_SCHED_BORE_H */
 diff --git a/init/Kconfig b/init/Kconfig
-index 826a7d768ca3..fc799fca9cbc 100644
+index d78a6e616311..be76d8980112 100644
 --- a/init/Kconfig
 +++ b/init/Kconfig
-@@ -1466,6 +1466,23 @@ config CHECKPOINT_RESTORE
+@@ -1469,6 +1469,23 @@ config CHECKPOINT_RESTORE
  
  	  If unsure, say N here.
  
